@@ -66,6 +66,10 @@ fi
 # LDFLAGS para linkear contra RPM
 export LDFLAGS="${LDFLAGS:-} -L$RPM_STAGING/$PREFIX/lib -Wl,-rpath-link,$RPM_STAGING/$PREFIX/lib"
 
+# También necesitamos -I flags para los headers de RPM durante compilación
+export CFLAGS="${CFLAGS:-} -I$RPM_STAGING/$PREFIX/include"
+echo "CFLAGS now: $CFLAGS"
+
 # Configure with cmake
 cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -G "Ninja" \

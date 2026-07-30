@@ -301,7 +301,7 @@ jobs:
   build-librepo:
     name: "📦 Build librepo"
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.component == 'all' || github.event.inputs.component == 'librepo'
-    needs: [validate]
+    needs: [build-rpm]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/termux/package-builder:latest
@@ -375,7 +375,7 @@ jobs:
   build-dnf5:
     name: "📦 Build dnf5"
     if: github.event_name != 'workflow_dispatch' || github.event.inputs.component == 'all' || github.event.inputs.component == 'dnf5'
-    needs: [validate]
+    needs: [build-zchunk, build-libcomps, build-libsolv, build-rpm, build-librepo]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/termux/package-builder:latest
