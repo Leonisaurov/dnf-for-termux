@@ -1,6 +1,0 @@
-From: dnf-for-termux <dev@termux.dev>
-Subject: [PATCH 2/2] bionic compatibility notes
-
-librepo uses GLib which abstracts platform differences.
-No bionic-specific changes required at this time.
----

@@ -665,5 +665,18 @@ Ver `docs/CI-PIPELINE.md` para documentación completa.
 
 ---
 
+## 11. Registro de Decisiones Técnicas
+
+### Decisión #1: Compatibilidad Bionic en librepo
+
+| Campo | Valor |
+|-------|-------|
+| **Contexto** | librepo (biblioteca de descarga de repositorios RPM) usa GLib como capa de abstracción de plataforma. Esto significa que las diferencias entre sistemas operativos (Linux, BSD, Android) son manejadas por GLib automáticamente. |
+| **Decisión** | No se requieren parches específicos para bionic (Android libc) en librepo. GLib abstrae las diferencias de plataforma. |
+| **Consecuencia** | Se eliminó el archivo `patches/librepo/0002-bionic-compat.patch`, que era un placeholder documentativo (no contenía bloques diff). El CI fallaba al intentar aplicarlo como parche. |
+| **Alternativas** | Crear un parche real modificando algún archivo de librepo (innecesario, pues no hay cambios que hacer). |
+| **Fecha** | 2026-07-29 |
+| **Responsable** | dnf-for-termux |
+
 *Actualizado: 29 julio 2026*
 *Basado en investigación de termux-pacman (13 parches analizados) y arquitectura de DNF5 (rpm-software-management/dnf5)*
