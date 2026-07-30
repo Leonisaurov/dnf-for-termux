@@ -441,7 +441,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /dev/null
-          key: termux-dnf5-v3-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+          key: termux-dnf5-v4-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
           lookup-only: true
 
   # ==========================================================================
@@ -601,7 +601,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/termux/dnf5/staging/
-          key: termux-dnf5-v3-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+          key: termux-dnf5-v4-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
 
   # ==========================================================================
   # CREATE REPO: Generar metadatos del repositorio RPM (solo main)
