@@ -15,8 +15,21 @@ echo "=== Building $COMPONENT ==="
 echo "Source dir: $SOURCE_DIR"
 echo "Prefix: $PREFIX"
 
-# Dependencies are pre-installed in the package-builder container
-echo "Using pre-installed dependencies"
+# Check and install missing build tools
+CMAKE=$(command -v cmake 2>/dev/null || true)
+if [ -z "$CMAKE" ]; then
+    echo "Installing cmake..."
+    CMAKE_VERSION=4.4.1
+    wget -q "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
+    tar -xzf "cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" -C /tmp/
+    export PATH="/tmp/cmake-${CMAKE_VERSION}-linux-x86_64/bin:$PATH"
+    echo "cmake installed at $(which cmake)"
+fi
+NINJA=$(command -v ninja 2>/dev/null || command -v ninja-build 2>/dev/null || true)
+if [ -z "$NINJA" ]; then
+    echo "Installing ninja..."
+    pip install ninja 2>&1 | tail -3
+fi
 
 # Create build directory
 rm -rf "$BUILD_DIR" "$STAGING_DIR"

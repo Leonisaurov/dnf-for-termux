@@ -15,8 +15,17 @@ echo "=== Building $COMPONENT ==="
 echo "Source dir: $SOURCE_DIR"
 echo "Prefix: $PREFIX"
 
-# Dependencies are pre-installed in the package-builder container
-echo "Using pre-installed dependencies"
+# Check and install missing build tools
+MESON=$(command -v meson 2>/dev/null || true)
+if [ -z "$MESON" ]; then
+    echo "Installing meson..."
+    pip install meson 2>&1 | tail -3
+fi
+NINJA=$(command -v ninja 2>/dev/null || command -v ninja-build 2>/dev/null || true)
+if [ -z "$NINJA" ]; then
+    echo "Installing ninja..."
+    pip install ninja 2>&1 | tail -3
+fi
 
 # Create build directory
 rm -rf "$BUILD_DIR" "$STAGING_DIR"
