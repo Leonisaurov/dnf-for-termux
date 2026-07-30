@@ -48,6 +48,7 @@ cmake -S "$SOURCE_DIR/libcomps" -B "$BUILD_DIR" \
   -DENABLE_DEVELOPMENT=ON \
   -DENABLE_DOCS=OFF \
   -DENABLE_TESTS=OFF \
+  -DSKBUILD=ON \
   2>&1
 
 # Build
