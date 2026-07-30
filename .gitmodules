@@ -13,3 +13,6 @@
 [submodule "source/zchunk"]
 	path = source/zchunk
 	url = https://github.com/zchunk/zchunk.git
+[submodule "source/rpm"]
+	path = source/rpm
+	url = https://github.com/rpm-software-management/rpm.git

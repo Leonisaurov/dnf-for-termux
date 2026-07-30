@@ -63,7 +63,7 @@ jobs:
 
       - name: Check patches apply cleanly
         run: |
-          for component in dnf5 libsolv librepo; do
+          for component in dnf5 libsolv librepo rpm; do
             PATCH_DIR="patches/$component"
             SRC_DIR="source/$component"
             if [ -d "$PATCH_DIR" ]; then
@@ -113,7 +113,6 @@ jobs:
         # Exclude components with no build.sh yet
         exclude:
           - component: dnf5
-          - component: rpm
     steps:
       - uses: actions/checkout@v4
         with:
