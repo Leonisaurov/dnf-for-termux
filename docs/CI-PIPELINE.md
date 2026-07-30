@@ -4,7 +4,7 @@
 
 ```
 GitHub Actions (ubuntu-latest)
-  └── Container: ghcr.io/termux/termux-packages:latest
+  └── Container: ghcr.io/termux/package-builder:latest
        ├── Cross-compiler: aarch64-linux-android-*
        ├── NDK: android-ndk (r26+)
        └── Target: aarch64 (ARM64)

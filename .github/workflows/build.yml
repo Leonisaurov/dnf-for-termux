@@ -8,7 +8,7 @@
 #   zchunk → libcomps → libsolv → librepo → dnf5 → RPM
 #
 # Infraestructura:
-#   - Container: ghcr.io/termux/termux-packages:latest
+#   - Container: ghcr.io/termux/termux-builder:latest
 #   - Target: aarch64 (ARM64)
 #   - Caching: S3/artifacts entre jobs
 #   - Release: GitHub Releases + GitHub Pages (repo RPM)
@@ -99,7 +99,7 @@ jobs:
     needs: [validate]
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/termux/termux-packages:latest
+      image: ghcr.io/termux/package-builder:latest
     strategy:
       fail-fast: false
       matrix:
