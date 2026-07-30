@@ -34,20 +34,37 @@ if [ -z "$NINJA" ]; then
     echo "ninja installed at $(which ninja)"
 fi
 
+# Ensure build dependencies (RPM linkage)
+sudo apt-get update -qq 2>/dev/null || true
+sudo apt-get install -y -qq \
+    libpopt-dev \
+    liblua5.4-dev \
+    libarchive-dev \
+    libbz2-dev \
+    libzstd-dev \
+    libssl-dev \
+    libsqlite3-dev \
+    libelf-dev \
+    libmagic-dev \
+    2>&1 | tail -5 || echo "Some packages may already be installed"
+
 # Create build directory
 rm -rf "$BUILD_DIR" "$STAGING_DIR"
 mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
-# Add RPM paths if available (from cached RPM build)
-if [ -n "${RPM_INCLUDE_DIR:-}" ] && [ -d "$RPM_INCLUDE_DIR" ]; then
-    echo "Using RPM from: $RPM_INCLUDE_DIR"
-    export CFLAGS="${CFLAGS:-} -I$RPM_INCLUDE_DIR"
-    export CXXFLAGS="${CXXFLAGS:-} -I$RPM_INCLUDE_DIR"
-    export LDFLAGS="${LDFLAGS:-} -L${RPM_LIB_DIR:-}"
-    CMAKE_RPM_FLAGS="-DRPM_INCLUDE_DIR=$RPM_INCLUDE_DIR -DRPM_LIB_DIR=${RPM_LIB_DIR:-}"
+# Configurar PKG_CONFIG_PATH para encontrar rpm.pc del staging
+RPM_STAGING="$SCRIPT_DIR/../build/termux/rpm/staging"
+if [ -d "$RPM_STAGING/$PREFIX/lib/pkgconfig" ]; then
+    export PKG_CONFIG_PATH="$RPM_STAGING/$PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+    echo "✅ RPM pkgconfig found: $PKG_CONFIG_PATH"
 else
-    CMAKE_RPM_FLAGS=""
+    echo "⚠️ RPM pkgconfig NOT found at $RPM_STAGING/$PREFIX/lib/pkgconfig"
+    # Intentar buscar en el sistema
+    ls /usr/lib/pkgconfig/rpm.pc 2>/dev/null && echo "System rpm.pc found" || echo "No system rpm.pc either"
 fi
+
+# LDFLAGS para linkear contra RPM
+export LDFLAGS="${LDFLAGS:-} -L$RPM_STAGING/$PREFIX/lib -Wl,-rpath-link,$RPM_STAGING/$PREFIX/lib"
 
 # Configure with cmake
 cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
@@ -56,13 +73,14 @@ cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_INSTALL_LIBDIR="$PREFIX/lib" \
   -DENABLE_DOCS=OFF \
+  -DENABLE_EXAMPLES=OFF \
   -DENABLE_TESTS=OFF \
   -DWITH_PYTHON3=OFF \
   -DENABLE_PYTHON=OFF \
   -DWITH_ZCHUNK=OFF \
   -DUSE_GPGME=ON \
   -DENABLE_SELINUX=OFF \
-  $CMAKE_RPM_FLAGS \
+  -DPKG_CONFIG_PATH="$PKG_CONFIG_PATH" \
   2>&1
 
 # Build
