@@ -18,17 +18,20 @@ echo "Prefix: $PREFIX"
 # Check and install missing build tools
 CMAKE=$(command -v cmake 2>/dev/null || true)
 if [ -z "$CMAKE" ]; then
-    echo "Installing cmake..."
+    echo "Downloading cmake..."
     CMAKE_VERSION=4.4.1
-    wget -q "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz"
-    tar -xzf "cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" -C /tmp/
+    wget -q "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" -O /tmp/cmake.tar.gz
+    tar -xzf /tmp/cmake.tar.gz -C /tmp/
     export PATH="/tmp/cmake-${CMAKE_VERSION}-linux-x86_64/bin:$PATH"
     echo "cmake installed at $(which cmake)"
 fi
 NINJA=$(command -v ninja 2>/dev/null || command -v ninja-build 2>/dev/null || true)
 if [ -z "$NINJA" ]; then
-    echo "Installing ninja..."
-    pip install ninja 2>&1 | tail -3
+    echo "Downloading ninja..."
+    wget -q "https://github.com/ninja-build/ninja/releases/download/v1.13.0/ninja-linux.zip" -O /tmp/ninja-linux.zip
+    unzip -o /tmp/ninja-linux.zip -d /tmp/ninja 2>/dev/null || true
+    export PATH="/tmp/ninja:$PATH"
+    echo "ninja installed at $(which ninja)"
 fi
 
 # Create build directory

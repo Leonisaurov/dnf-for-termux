@@ -16,15 +16,19 @@ echo "Source dir: $SOURCE_DIR"
 echo "Prefix: $PREFIX"
 
 # Check and install missing build tools
-MESON=$(command -v meson 2>/dev/null || true)
-if [ -z "$MESON" ]; then
-    echo "Installing meson..."
-    pip install meson 2>&1 | tail -3
-fi
 NINJA=$(command -v ninja 2>/dev/null || command -v ninja-build 2>/dev/null || true)
 if [ -z "$NINJA" ]; then
-    echo "Installing ninja..."
-    pip install ninja 2>&1 | tail -3
+    echo "Downloading ninja..."
+    wget -q "https://github.com/ninja-build/ninja/releases/download/v1.13.0/ninja-linux.zip" -O /tmp/ninja-linux.zip
+    unzip -o /tmp/ninja-linux.zip -d /tmp/ninja 2>/dev/null
+    export PATH="/tmp/ninja:$PATH"
+    echo "ninja installed at $(which ninja)"
+fi
+MESON=$(command -v meson 2>/dev/null || true)
+if [ -z "$MESON" ]; then
+    echo "Downloading meson..."
+    pip install --user meson 2>&1 | tail -3
+    export PATH="$HOME/.local/bin:$PATH"
 fi
 
 # Create build directory
