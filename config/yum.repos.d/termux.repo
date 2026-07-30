@@ -1,0 +1,6 @@
+# termux.repo - Repositorios Termux para DNF
+[termux]
+name=Termux Packages
+baseurl=https://packages.termux.dev/apt/termux-main
+enabled=1
+gpgcheck=1
