@@ -15,9 +15,8 @@ echo "=== Building $COMPONENT ==="
 echo "Source dir: $SOURCE_DIR"
 echo "Prefix: $PREFIX"
 
-# Install dependencies
-apt-get update -qq
-apt-get install -y -qq cmake ninja-build pkg-config zlib1g-dev libexpat1-dev liblzma-dev libbz2-dev libzstd-dev 2>&1 | tail -5
+# Dependencies are pre-installed in the package-builder container
+echo "Using pre-installed dependencies"
 
 # Create build directory
 rm -rf "$BUILD_DIR" "$STAGING_DIR"
