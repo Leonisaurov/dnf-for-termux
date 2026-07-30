@@ -1,5 +1,7 @@
-# Build artifacts
-build/
+# Build artifacts (except termux build scripts)
+build/*
+!build/termux/
+!build/termux/**/
 !build/termux/*.sh
 !build/termux/*.patch
 *.o
