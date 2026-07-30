@@ -44,17 +44,30 @@ sudo apt-get install -y -qq \
     libglib2.0-dev libxml2-dev libssl-dev \
     libzstd-dev libbz2-dev liblzma-dev 2>&1 | tail -5 || echo "Some packages may already be installed"
 
-# === Apply patches ===
-echo "Applying patches from patches/$COMPONENT/..."
-PATCH_DIR="$PROJECT_DIR/patches/$COMPONENT"
-if [ -d "$PATCH_DIR" ]; then
-    for patch in "$PATCH_DIR"/*.patch; do
-        if [ -f "$patch" ]; then
-            echo "  Applying: $(basename "$patch")"
-            patch -d "$SOURCE_DIR" -p1 < "$patch" 2>&1 || echo "  Warning: patch may have already been applied"
-        fi
-    done
+# === Install toml11 (header-only TOML parser, required by dnf5) ===
+# dnf5 uses toml11 for versionlock config parsing (find_package(toml11))
+echo "Installing toml11..."
+if apt-cache show libtoml11-dev &>/dev/null; then
+    sudo apt-get install -y -qq libtoml11-dev 2>&1 | tail -3
+else
+    # toml11 v4.3.0 - header-only, just need CMake config installed
+    TOML11_VERSION="4.3.0"
+    wget -q "https://github.com/ToruNiina/toml11/archive/refs/tags/v${TOML11_VERSION}.tar.gz" -O /tmp/toml11.tar.gz
+    tar -xzf /tmp/toml11.tar.gz -C /tmp/
+    mkdir -p /tmp/toml11-${TOML11_VERSION}/build
+    cmake -S "/tmp/toml11-${TOML11_VERSION}" -B "/tmp/toml11-${TOML11_VERSION}/build" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -Dtoml11_BUILD_TEST=OFF
+    sudo cmake --install "/tmp/toml11-${TOML11_VERSION}/build" 2>&1 | tail -3
+    rm -rf "/tmp/toml11-${TOML11_VERSION}" /tmp/toml11.tar.gz
 fi
+echo "toml11 installed"
+
+# === Apply patches (handled by CI workflow) ===
+# Patches are applied by the CI workflow before this script runs.
+# If running manually, apply them first: ./scripts/apply-patches.sh dnf5
+echo "Patches are applied by CI workflow. Skipping patch application."
 
 # === Cached dependency detection ===
 # Use environment variables (RPM_INCLUDE_DIR, RPM_LIB_DIR, LIBSOLV_DIR, etc.)
