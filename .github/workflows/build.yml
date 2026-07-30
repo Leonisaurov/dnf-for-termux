@@ -343,6 +343,7 @@ jobs:
 
       - name: Build dnf5
         if: steps.dnf5.outputs.cache-hit != 'true'
+        shell: bash
         env:
           TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
