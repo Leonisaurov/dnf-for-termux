@@ -1,5 +1,7 @@
 # Build artifacts
 build/
+!build/termux/*.sh
+!build/termux/*.patch
 *.o
 *.so
 *.a
