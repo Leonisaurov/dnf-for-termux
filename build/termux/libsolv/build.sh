@@ -71,6 +71,7 @@ cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -DRPM_INCLUDE_DIR="$RPM_STAGING/include" \
   -DRPMDB_LIBRARY="$RPM_STAGING/lib/librpm.so" \
   -DCMAKE_EXE_LINKER_FLAGS="-L$RPM_STAGING/lib -Wl,--no-as-needed -lrpm -lrpmio -Wl,--as-needed" \
+  -DENABLE_COMPLEX_DEPS=ON \
   -DENABLE_PUBKEY=OFF \
   -DBUILD_TESTING=OFF \
   2>&1
