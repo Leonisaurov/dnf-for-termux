@@ -123,14 +123,40 @@ jobs:
         id: cache
         with:
           path: |
-            /home/builder/.termux-build/${{ matrix.component }}/output/
-            /home/builder/.termux-build/${{ matrix.component }}/build/
+            build/termux/${{ matrix.component }}/staging/
           key: termux-${{ matrix.component }}-${{ hashFiles(format('build/termux/{0}/build.sh', matrix.component), format('patches/{0}/*.patch', matrix.component)) }}
           restore-keys: |
             termux-${{ matrix.component }}-
 
+      - name: Restore RPM cache (for librepo)
+        if: matrix.component == 'librepo'
+        uses: actions/cache/restore@v4
+        id: rpm-cache
+        with:
+          path: build/termux/rpm/staging/
+          key: termux-rpm-
+          restore-keys: |
+            termux-rpm-
+          fail-on-cache-miss: false
+
+      - name: Check RPM availability (librepo)
+        if: matrix.component == 'librepo'
+        run: |
+          if [ -d "build/termux/rpm/staging/$TERMUX_PREFIX/include/rpm" ]; then
+            echo "✅ RPM headers found in cache"
+            echo "RPM_INCLUDE_DIR=$PWD/build/termux/rpm/staging/$TERMUX_PREFIX/include" >> $GITHUB_ENV
+            echo "RPM_LIB_DIR=$PWD/build/termux/rpm/staging/$TERMUX_PREFIX/lib" >> $GITHUB_ENV
+          else
+            echo "⚠️ RPM not cached — skipping librepo (run rpm build first)"
+            echo "SKIP_LIBREPO=true" >> $GITHUB_ENV
+          fi
+
       - name: Build ${{ matrix.component }}
         run: |
+          if [ "$SKIP_LIBREPO" = "true" ]; then
+            echo "⏭️ Skipping librepo build (RPM not cached)"
+            exit 0
+          fi
           # Apply patches
           for patch in patches/${{ matrix.component }}/*.patch; do
             if [ -s "$patch" ]; then
@@ -145,6 +171,8 @@ jobs:
             chmod +x "build/termux/${{ matrix.component }}/build.sh"
             TERMUX_PREFIX=$TERMUX_PREFIX \
             TARGET_ARCH=$TARGET_ARCH \
+            RPM_INCLUDE_DIR="$RPM_INCLUDE_DIR" \
+            RPM_LIB_DIR="$RPM_LIB_DIR" \
             ./build/termux/${{ matrix.component }}/build.sh
           else
             echo "⚠️  No build.sh yet for ${{ matrix.component }}"

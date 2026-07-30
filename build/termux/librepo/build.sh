@@ -38,6 +38,17 @@ fi
 rm -rf "$BUILD_DIR" "$STAGING_DIR"
 mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
+# Add RPM paths if available (from cached RPM build)
+if [ -n "${RPM_INCLUDE_DIR:-}" ] && [ -d "$RPM_INCLUDE_DIR" ]; then
+    echo "Using RPM from: $RPM_INCLUDE_DIR"
+    export CFLAGS="$CFLAGS -I$RPM_INCLUDE_DIR"
+    export CXXFLAGS="$CXXFLAGS -I$RPM_INCLUDE_DIR"
+    export LDFLAGS="$LDFLAGS -L${RPM_LIB_DIR:-}"
+    CMAKE_RPM_FLAGS="-DRPM_INCLUDE_DIR=$RPM_INCLUDE_DIR -DRPM_LIB_DIR=${RPM_LIB_DIR:-}"
+else
+    CMAKE_RPM_FLAGS=""
+fi
+
 # Configure with cmake
 cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -G "Ninja" \
@@ -51,6 +62,7 @@ cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -DWITH_ZCHUNK=OFF \
   -DUSE_GPGME=ON \
   -DENABLE_SELINUX=OFF \
+  $CMAKE_RPM_FLAGS \
   2>&1
 
 # Build
