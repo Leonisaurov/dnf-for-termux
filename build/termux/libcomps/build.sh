@@ -19,7 +19,7 @@ echo "Prefix: $PREFIX"
 CMAKE=$(command -v cmake 2>/dev/null || true)
 if [ -z "$CMAKE" ]; then
     echo "Downloading cmake..."
-    CMAKE_VERSION=4.4.1
+    CMAKE_VERSION=3.31.7
     wget -q "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" -O /tmp/cmake.tar.gz
     tar -xzf /tmp/cmake.tar.gz -C /tmp/
     export PATH="/tmp/cmake-${CMAKE_VERSION}-linux-x86_64/bin:$PATH"
