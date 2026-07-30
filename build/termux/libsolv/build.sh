@@ -10,6 +10,9 @@ SOURCE_DIR="$SCRIPT_DIR/../source/$COMPONENT"
 BUILD_DIR="$SCRIPT_DIR/../build/termux/$COMPONENT/build"
 STAGING_DIR="$SCRIPT_DIR/../build/termux/$COMPONENT/staging"
 PREFIX="${TERMUX_PREFIX:-/data/data/com.termux/files/usr}"
+PROJECT_DIR="$SCRIPT_DIR/.."
+# Get RPM staging from environment (RPM_DIR) or fall back to default
+RPM_STAGING="${RPM_DIR:-$PROJECT_DIR/build/termux/rpm/staging/$PREFIX}"
 
 echo "=== Building $COMPONENT ==="
 echo "Source dir: $SOURCE_DIR"
@@ -56,7 +59,9 @@ cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -DENABLE_RUBY=OFF \
   -DENABLE_TCL=OFF \
   -DENABLE_LUA=OFF \
-  -DENABLE_RPMDB=OFF \
+  -DENABLE_RPMDB=ON \
+  -DRPM_INCLUDE_DIR="$RPM_STAGING/include" \
+  -DRPMDB_LIBRARY="$RPM_STAGING/lib/librpm.so" \
   -DENABLE_PUBKEY=OFF \
   -DBUILD_TESTING=OFF \
   2>&1

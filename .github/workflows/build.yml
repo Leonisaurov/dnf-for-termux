@@ -1,8 +1,11 @@
 # ============================================================================
-# dnf-for-termux: CI/CD Pipeline
+# dnf-for-termux: CI/CD Pipeline — Arquitectura Paralela
 # ============================================================================
-# Compila todo el stack de DNF para Termux usando cross-compilation.
-# Con pre-check de caches para evitar containers innecesarios.
+# Cada componente tiene 2 jobs:
+#   1. check-cache-{componente} — lookup-only (sin container, 0 recursos)
+#   2. build-{componente} — solo si cache miss (container)
+# Los builds independientes (zchunk, libcomps, libsolv, rpm) corren en paralelo.
+# Librepo espera a rpm. Dnf5 espera a TODOS.
 # ============================================================================
 
 name: build
@@ -38,11 +41,12 @@ concurrency:
 env:
   TERMUX_PREFIX: /data/data/com.termux/files/usr
   TARGET_ARCH: aarch64
+  BUILDER_IMAGE: ghcr.io/termux/package-builder:latest
 
 jobs:
-  # --------------------------------------------------------------------------
+  # ==========================================================================
   # VALIDATION: Check patches and structure
-  # --------------------------------------------------------------------------
+  # ==========================================================================
   validate:
     name: "🔍 Validate"
     runs-on: ubuntu-latest
@@ -81,125 +85,158 @@ jobs:
           fi
           echo "✅ All submodules initialized"
 
-  # --------------------------------------------------------------------------
-  # CHECK CACHES: Pre-check which components need building (fast, no container)
-  # Usa actions/cache con lookup-only para verificar existencia exacta de cache
-  # sin descargar ni arrancar container.
-  # --------------------------------------------------------------------------
-  check-caches:
-    name: "🔍 Check caches"
+  # ==========================================================================
+  # RESOLVE TARGETS: Filter componentes según workflow_dispatch
+  # ==========================================================================
+  resolve-targets:
+    name: "🎯 Resolve targets"
     needs: [validate]
     runs-on: ubuntu-latest
     outputs:
-      needs-build: ${{ steps.set-output.outputs.needs-build }}
+      zchunk: ${{ steps.resolve.outputs.zchunk }}
+      libcomps: ${{ steps.resolve.outputs.libcomps }}
+      libsolv: ${{ steps.resolve.outputs.libsolv }}
+      rpm: ${{ steps.resolve.outputs.rpm }}
+      librepo: ${{ steps.resolve.outputs.librepo }}
+      dnf5: ${{ steps.resolve.outputs.dnf5 }}
+    steps:
+      - id: resolve
+        run: |
+          REQUESTED="${{ github.event.inputs.component || 'all' }}"
+          # Default all to false
+          echo "zchunk=false" >> $GITHUB_OUTPUT
+          echo "libcomps=false" >> $GITHUB_OUTPUT
+          echo "libsolv=false" >> $GITHUB_OUTPUT
+          echo "rpm=false" >> $GITHUB_OUTPUT
+          echo "librepo=false" >> $GITHUB_OUTPUT
+          echo "dnf5=false" >> $GITHUB_OUTPUT
+
+          case "$REQUESTED" in
+            all)
+              echo "zchunk=true" >> $GITHUB_OUTPUT
+              echo "libcomps=true" >> $GITHUB_OUTPUT
+              echo "libsolv=true" >> $GITHUB_OUTPUT
+              echo "rpm=true" >> $GITHUB_OUTPUT
+              echo "librepo=true" >> $GITHUB_OUTPUT
+              echo "dnf5=true" >> $GITHUB_OUTPUT
+              ;;
+            dnf5)
+              echo "zchunk=true" >> $GITHUB_OUTPUT  # dep
+              echo "libcomps=true" >> $GITHUB_OUTPUT # dep
+              echo "libsolv=true" >> $GITHUB_OUTPUT  # dep
+              echo "rpm=true" >> $GITHUB_OUTPUT      # dep
+              echo "librepo=true" >> $GITHUB_OUTPUT  # dep
+              echo "dnf5=true" >> $GITHUB_OUTPUT     # requested
+              ;;
+            librepo)
+              echo "rpm=true" >> $GITHUB_OUTPUT      # dep
+              echo "librepo=true" >> $GITHUB_OUTPUT  # requested
+              ;;
+            rpm)
+              echo "rpm=true" >> $GITHUB_OUTPUT
+              ;;
+            zchunk)
+              echo "zchunk=true" >> $GITHUB_OUTPUT
+              ;;
+            libcomps)
+              echo "libcomps=true" >> $GITHUB_OUTPUT
+              ;;
+            libsolv)
+              echo "libsolv=true" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  # ==========================================================================
+  # CHECK CACHE: zchunk (independiente)
+  # ==========================================================================
+  check-cache-zchunk:
+    name: "🔍 Check zchunk"
+    needs: [resolve-targets]
+    if: needs.resolve-targets.outputs.zchunk == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.cache-hit }}
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
-
-      # Check each component cache with lookup-only (no download, no container)
-      - name: Check zchunk cache
-        id: cache-zchunk
+      - id: check
         uses: actions/cache@v4
         with:
           path: /dev/null
           key: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
           lookup-only: true
 
-      - name: Check libcomps cache
-        id: cache-libcomps
+  # ==========================================================================
+  # CHECK CACHE: libcomps (independiente)
+  # ==========================================================================
+  check-cache-libcomps:
+    name: "🔍 Check libcomps"
+    needs: [resolve-targets]
+    if: needs.resolve-targets.outputs.libcomps == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - id: check
         uses: actions/cache@v4
         with:
           path: /dev/null
           key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
           lookup-only: true
 
-      - name: Check libsolv cache
-        id: cache-libsolv
+  # ==========================================================================
+  # CHECK CACHE: libsolv (independiente)
+  # ==========================================================================
+  check-cache-libsolv:
+    name: "🔍 Check libsolv"
+    needs: [resolve-targets]
+    if: needs.resolve-targets.outputs.libsolv == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - id: check
         uses: actions/cache@v4
         with:
           path: /dev/null
           key: termux-libsolv-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
           lookup-only: true
 
-      - name: Check rpm cache
-        id: cache-rpm
+  # ==========================================================================
+  # CHECK CACHE: rpm (independiente)
+  # ==========================================================================
+  check-cache-rpm:
+    name: "🔍 Check rpm"
+    needs: [resolve-targets]
+    if: needs.resolve-targets.outputs.rpm == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - id: check
         uses: actions/cache@v4
         with:
           path: /dev/null
           key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
           lookup-only: true
 
-      - name: Check librepo cache
-        id: cache-librepo
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
-          lookup-only: true
-
-      - name: Check dnf5 cache
-        id: cache-dnf5
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-dnf5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
-          lookup-only: true
-
-      - name: Determine what needs building
-        id: set-output
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          # Read requested component from workflow_dispatch (default: "all")
-          REQUESTED="${{ github.event.inputs.component || 'all' }}"
-          
-          declare -A CACHE_HITS
-          CACHE_HITS[zchunk]="${{ steps.cache-zchunk.outputs.cache-hit }}"
-          CACHE_HITS[libcomps]="${{ steps.cache-libcomps.outputs.cache-hit }}"
-          CACHE_HITS[libsolv]="${{ steps.cache-libsolv.outputs.cache-hit }}"
-          CACHE_HITS[rpm]="${{ steps.cache-rpm.outputs.cache-hit }}"
-          CACHE_HITS[librepo]="${{ steps.cache-librepo.outputs.cache-hit }}"
-          CACHE_HITS[dnf5]="${{ steps.cache-dnf5.outputs.cache-hit }}"
-          
-          NEEDS_BUILD=()
-          ALL_CACHED=true
-          
-          for comp in zchunk libcomps libsolv rpm librepo dnf5; do
-            # Skip if a specific component was requested and this is not it
-            if [ "$REQUESTED" != "all" ] && [ "$REQUESTED" != "$comp" ]; then
-              echo "⏭️  $comp: not requested, skipping"
-              continue
-            fi
-            
-            if [ "${CACHE_HITS[$comp]}" = "true" ]; then
-              echo "  ✅ $comp: CACHED"
-            else
-              echo "  ❌ $comp: MISS → needs build"
-              NEEDS_BUILD+=("$comp")
-              ALL_CACHED=false
-            fi
-          done
-          
-          # Convert to JSON array for output (compact single-line para GITHUB_OUTPUT)
-          echo "needs-build=$(printf '%s\n' "${NEEDS_BUILD[@]}" | jq -R . | jq -s -c .)" >> $GITHUB_OUTPUT
-          
-          if [ "$ALL_CACHED" = "true" ]; then
-            echo "🎉 All components cached! No build needed."
-          else
-            echo "📦 Components to build: ${NEEDS_BUILD[*]}"
-          fi
-
-  # --------------------------------------------------------------------------
-  # BUILD ALL: Sequential builds in dependency order (1 container)
-  #   Order: zchunk → libcomps → libsolv → rpm → librepo → dnf5
-  #   Solo ejecuta si check-caches detectó al menos un miss.
-  # --------------------------------------------------------------------------
-  build-all:
-    name: "📦 Build components"
-    needs: [check-caches]
-    if: needs.check-caches.outputs.needs-build != '[]'
+  # ==========================================================================
+  # BUILD: zchunk (independiente)
+  # ==========================================================================
+  build-zchunk:
+    name: "📦 Build zchunk"
+    needs: [check-cache-zchunk]
+    if: needs.check-cache-zchunk.outputs.cache-hit != 'true'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/termux/package-builder:latest
@@ -208,112 +245,233 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Setup staging directories
+      - name: Apply patches
+        shell: bash
         run: |
-          for comp in zchunk libcomps libsolv rpm librepo dnf5; do
-            mkdir -p "build/termux/$comp/staging"
+          mkdir -p build/termux/zchunk/staging
+          for patch in patches/zchunk/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d source/zchunk < "$patch" || true
+            fi
           done
 
-      # =========================================================================
-      # BUILD: zchunk (independiente)
-      # =========================================================================
+      - name: Build zchunk
+        shell: bash
+        env:
+          TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
+          TARGET_ARCH: ${{ env.TARGET_ARCH }}
+        run: |
+          chmod +x build/termux/zchunk/build.sh
+          ./build/termux/zchunk/build.sh
+
       - name: Cache zchunk
-        id: zchunk
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
           path: build/termux/zchunk/staging/
           key: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
 
-      - name: Build zchunk
-        if: steps.zchunk.outputs.cache-hit != 'true'
+  # ==========================================================================
+  # BUILD: libcomps (independiente)
+  # ==========================================================================
+  build-libcomps:
+    name: "📦 Build libcomps"
+    needs: [check-cache-libcomps]
+    if: needs.check-cache-libcomps.outputs.cache-hit != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Apply patches
+        shell: bash
+        run: |
+          mkdir -p build/termux/libcomps/staging
+          for patch in patches/libcomps/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d source/libcomps < "$patch" || true
+            fi
+          done
+
+      - name: Build libcomps
+        shell: bash
         env:
           TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
         run: |
-          for patch in patches/zchunk/*.patch; do
-            [ -s "$patch" ] && echo "Applying: $patch" && patch -p1 -d source/zchunk < "$patch" || true
-          done
-          chmod +x build/termux/zchunk/build.sh
-          ./build/termux/zchunk/build.sh
+          chmod +x build/termux/libcomps/build.sh
+          ./build/termux/libcomps/build.sh
 
-      # =========================================================================
-      # BUILD: libcomps (independiente)
-      # =========================================================================
       - name: Cache libcomps
-        id: libcomps
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
           path: build/termux/libcomps/staging/
           key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
 
-      - name: Build libcomps
-        if: steps.libcomps.outputs.cache-hit != 'true'
+  # ==========================================================================
+  # BUILD: libsolv (depende de rpm para ENABLE_RPMDB)
+  # ==========================================================================
+  build-libsolv:
+    name: "📦 Build libsolv"
+    needs: [check-cache-libsolv, build-rpm]
+    if: needs.check-cache-libsolv.outputs.cache-hit != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Apply patches
+        shell: bash
+        run: |
+          mkdir -p build/termux/libsolv/staging
+          for patch in patches/libsolv/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d source/libsolv < "$patch" || true
+            fi
+          done
+
+      - name: Build libsolv
+        shell: bash
         env:
           TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
+          RPM_DIR: ${{ github.workspace }}/build/termux/rpm/staging/${{ env.TERMUX_PREFIX }}
         run: |
-          for patch in patches/libcomps/*.patch; do
-            [ -s "$patch" ] && echo "Applying: $patch" && patch -p1 -d source/libcomps < "$patch" || true
-          done
-          chmod +x build/termux/libcomps/build.sh
-          ./build/termux/libcomps/build.sh
+          chmod +x build/termux/libsolv/build.sh
+          ./build/termux/libsolv/build.sh
 
-      # =========================================================================
-      # BUILD: libsolv (independiente)
-      # =========================================================================
       - name: Cache libsolv
-        id: libsolv
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
           path: build/termux/libsolv/staging/
           key: termux-libsolv-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
 
-      - name: Build libsolv
-        if: steps.libsolv.outputs.cache-hit != 'true'
+  # ==========================================================================
+  # BUILD: rpm (independiente)
+  # ==========================================================================
+  build-rpm:
+    name: "📦 Build rpm"
+    needs: [check-cache-rpm]
+    if: needs.check-cache-rpm.outputs.cache-hit != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Apply patches
+        shell: bash
+        run: |
+          mkdir -p build/termux/rpm/staging
+          for patch in patches/rpm/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d source/rpm < "$patch" || true
+            fi
+          done
+
+      - name: Build rpm
+        shell: bash
         env:
           TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
         run: |
-          for patch in patches/libsolv/*.patch; do
-            [ -s "$patch" ] && echo "Applying: $patch" && patch -p1 -d source/libsolv < "$patch" || true
-          done
-          chmod +x build/termux/libsolv/build.sh
-          ./build/termux/libsolv/build.sh
+          chmod +x build/termux/rpm/build.sh
+          ./build/termux/rpm/build.sh
 
-      # =========================================================================
-      # BUILD: rpm (independiente)
-      # =========================================================================
       - name: Cache rpm
-        id: rpm
-        uses: actions/cache@v4
+        uses: actions/cache/save@v4
         with:
           path: build/termux/rpm/staging/
           key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
 
-      - name: Build rpm
-        if: steps.rpm.outputs.cache-hit != 'true'
-        env:
-          TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
-          TARGET_ARCH: ${{ env.TARGET_ARCH }}
-        run: |
-          for patch in patches/rpm/*.patch; do
-            [ -s "$patch" ] && echo "Applying: $patch" && patch -p1 -d source/rpm < "$patch" || true
-          done
-          chmod +x build/termux/rpm/build.sh
-          ./build/termux/rpm/build.sh
-
-      # =========================================================================
-      # BUILD: librepo (needs rpm headers from cache/staging)
-      # =========================================================================
-      - name: Cache librepo
-        id: librepo
+  # ==========================================================================
+  # CHECK CACHE: librepo (depende de rpm — espera a que rpm termine)
+  # ==========================================================================
+  check-cache-librepo:
+    name: "🔍 Check librepo"
+    needs: [resolve-targets, build-rpm]
+    if: needs.resolve-targets.outputs.librepo == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - id: check
         uses: actions/cache@v4
         with:
-          path: build/termux/librepo/staging/
+          path: /dev/null
           key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
+          lookup-only: true
+
+  # ==========================================================================
+  # CHECK CACHE: dnf5 (depende de TODOS — espera a que todos terminen)
+  # ==========================================================================
+  check-cache-dnf5:
+    name: "🔍 Check dnf5"
+    needs: [resolve-targets, build-zchunk, build-libcomps, build-libsolv, build-rpm, build-librepo]
+    if: needs.resolve-targets.outputs.dnf5 == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - id: check
+        uses: actions/cache@v4
+        with:
+          path: /dev/null
+          key: termux-dnf5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+          lookup-only: true
+
+  # ==========================================================================
+  # BUILD: librepo (necesita rpm staging)
+  # ==========================================================================
+  build-librepo:
+    name: "📦 Build librepo"
+    needs: [check-cache-librepo]
+    if: needs.check-cache-librepo.outputs.cache-hit != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Restore rpm staging
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/rpm/staging/
+          key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
+          fail-on-cache-miss: false
+
+      - name: Apply patches
+        shell: bash
+        run: |
+          mkdir -p build/termux/librepo/staging
+          for patch in patches/librepo/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d source/librepo < "$patch" || true
+            fi
+          done
 
       - name: Build librepo
-        if: steps.librepo.outputs.cache-hit != 'true'
+        shell: bash
         env:
           TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
           TARGET_ARCH: ${{ env.TARGET_ARCH }}
@@ -321,28 +479,78 @@ jobs:
         run: |
           if [ ! -d "$RPM_DIR/include/rpm" ]; then
             echo "⚠️  RPM headers not found in staging — librepo build may fail"
-            echo "   Expected at: $RPM_DIR/include/rpm"
+            echo "   Expected at: $RPM_DIR"
           else
             echo "✅ RPM headers found at $RPM_DIR"
           fi
-          for patch in patches/librepo/*.patch; do
-            [ -s "$patch" ] && echo "Applying: $patch" && patch -p1 -d source/librepo < "$patch" || true
-          done
           chmod +x build/termux/librepo/build.sh
           ./build/termux/librepo/build.sh
 
-      # =========================================================================
-      # BUILD: dnf5 (needs all deps)
-      # =========================================================================
-      - name: Cache dnf5
-        id: dnf5
-        uses: actions/cache@v4
+      - name: Cache librepo
+        uses: actions/cache/save@v4
         with:
-          path: build/termux/dnf5/staging/
-          key: termux-dnf5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+          path: build/termux/librepo/staging/
+          key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
+
+  # ==========================================================================
+  # BUILD: dnf5 (necesita TODOS los staging)
+  # ==========================================================================
+  build-dnf5:
+    name: "📦 Build dnf5"
+    needs: [check-cache-dnf5]
+    if: needs.check-cache-dnf5.outputs.cache-hit != 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      # Restaurar TODAS las dependencias desde cache
+      - name: Restore zchunk staging
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/zchunk/staging/
+          key: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
+          fail-on-cache-miss: false
+      - name: Restore libcomps staging
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/libcomps/staging/
+          key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
+          fail-on-cache-miss: false
+      - name: Restore libsolv staging
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/libsolv/staging/
+          key: termux-libsolv-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
+          fail-on-cache-miss: false
+      - name: Restore rpm staging
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/rpm/staging/
+          key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
+          fail-on-cache-miss: false
+      - name: Restore librepo staging
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/librepo/staging/
+          key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
+          fail-on-cache-miss: false
+
+      - name: Apply patches
+        shell: bash
+        run: |
+          mkdir -p build/termux/dnf5/staging
+          for patch in patches/dnf5/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d source/dnf5 < "$patch" || true
+            fi
+          done
 
       - name: Build dnf5
-        if: steps.dnf5.outputs.cache-hit != 'true'
         shell: bash
         env:
           TERMUX_PREFIX: ${{ env.TERMUX_PREFIX }}
@@ -369,16 +577,9 @@ jobs:
             echo "⚠️  Dependencias faltantes:$MISSING"
             echo "   El build puede fallar si estas dependencias son requeridas."
           fi
-          
-          for patch in patches/dnf5/*.patch; do
-            [ -s "$patch" ] && echo "Applying: $patch" && patch -p1 -d source/dnf5 < "$patch" || true
-          done
           chmod +x build/termux/dnf5/build.sh
           ./build/termux/dnf5/build.sh
 
-      # =========================================================================
-      # UPLOAD: Subir artefactos para create-repo / release
-      # =========================================================================
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -389,12 +590,18 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-  # --------------------------------------------------------------------------
-  # REPOSITORY: Generate RPM repository metadata
-  # --------------------------------------------------------------------------
+      - name: Cache dnf5
+        uses: actions/cache/save@v4
+        with:
+          path: build/termux/dnf5/staging/
+          key: termux-dnf5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+
+  # ==========================================================================
+  # CREATE REPO: Generar metadatos del repositorio RPM (solo main)
+  # ==========================================================================
   create-repo:
     name: "📚 Create RPM Repository"
-    needs: [build-all]
+    needs: [build-dnf5]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -402,6 +609,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: dnf5-*
           path: /tmp/artifacts
           merge-multiple: true
       - name: Create RPM repository
@@ -422,18 +630,19 @@ jobs:
           publish_dir: /tmp/repo
           destination_dir: rpm
 
-  # --------------------------------------------------------------------------
-  # RELEASE: Create GitHub Release
-  # --------------------------------------------------------------------------
+  # ==========================================================================
+  # RELEASE: Crear GitHub Release (solo tags v*)
+  # ==========================================================================
   release:
     name: "🏷️ Release"
-    needs: [build-all]
+    needs: [build-dnf5]
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: dnf5-*
           path: /tmp/release-artifacts
           merge-multiple: true
       - name: Create Release
