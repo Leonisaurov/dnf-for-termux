@@ -110,9 +110,6 @@ jobs:
           - librepo
           - dnf5
           - rpm
-        # Exclude components with no build.sh yet
-        exclude:
-          - component: dnf5
     steps:
       - uses: actions/checkout@v4
         with:
@@ -151,6 +148,82 @@ jobs:
             echo "SKIP_LIBREPO=true" >> $GITHUB_ENV
           fi
 
+      - name: Restore RPM cache
+        if: matrix.component == 'dnf5'
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/rpm/staging/
+          key: termux-rpm-
+          restore-keys: termux-rpm-
+          fail-on-cache-miss: false
+
+      - name: Restore libsolv cache
+        if: matrix.component == 'dnf5'
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/libsolv/staging/
+          key: termux-libsolv-
+          restore-keys: termux-libsolv-
+          fail-on-cache-miss: false
+
+      - name: Restore librepo cache
+        if: matrix.component == 'dnf5'
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/librepo/staging/
+          key: termux-librepo-
+          restore-keys: termux-librepo-
+          fail-on-cache-miss: false
+
+      - name: Restore libcomps cache
+        if: matrix.component == 'dnf5'
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/libcomps/staging/
+          key: termux-libcomps-
+          restore-keys: termux-libcomps-
+          fail-on-cache-miss: false
+
+      - name: Restore zchunk cache
+        if: matrix.component == 'dnf5'
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/zchunk/staging/
+          key: termux-zchunk-
+          restore-keys: termux-zchunk-
+          fail-on-cache-miss: false
+
+      - name: Restore dependency caches (for dnf5)
+        if: matrix.component == 'dnf5'
+        run: |
+          # RPM
+          if [ -d "build/termux/rpm/staging/$TERMUX_PREFIX/include/rpm" ]; then
+            echo "✅ RPM headers found"
+            echo "RPM_DIR=$PWD/build/termux/rpm/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
+          else
+            echo "⚠️ RPM not cached — may fail"
+          fi
+          # libsolv
+          if [ -d "build/termux/libsolv/staging/$TERMUX_PREFIX/include/solv" ]; then
+            echo "✅ libsolv headers found"
+            echo "LIBSOLV_DIR=$PWD/build/termux/libsolv/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
+          fi
+          # librepo
+          if [ -d "build/termux/librepo/staging/$TERMUX_PREFIX/include/librepo" ]; then
+            echo "✅ librepo headers found"
+            echo "LIBREPO_DIR=$PWD/build/termux/librepo/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
+          fi
+          # libcomps
+          if [ -d "build/termux/libcomps/staging/$TERMUX_PREFIX/include/libcomps" ]; then
+            echo "✅ libcomps headers found"
+            echo "LIBCOMPS_DIR=$PWD/build/termux/libcomps/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
+          fi
+          # zchunk
+          if [ -d "build/termux/zchunk/staging/$TERMUX_PREFIX/include/zck.h" ]; then
+            echo "✅ zchunk headers found"
+            echo "ZCHUNK_DIR=$PWD/build/termux/zchunk/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
+          fi
+
       - name: Build ${{ matrix.component }}
         run: |
           if [ "$SKIP_LIBREPO" = "true" ]; then
@@ -169,6 +242,10 @@ jobs:
           if [ -f "build/termux/${{ matrix.component }}/build.sh" ]; then
             echo "Using custom build.sh"
             chmod +x "build/termux/${{ matrix.component }}/build.sh"
+            # Export dependency paths for dnf5
+            if [ "${{ matrix.component }}" = "dnf5" ]; then
+              export RPM_DIR="${RPM_DIR:-}" LIBSOLV_DIR="${LIBSOLV_DIR:-}" LIBREPO_DIR="${LIBREPO_DIR:-}" LIBCOMPS_DIR="${LIBCOMPS_DIR:-}" ZCHUNK_DIR="${ZCHUNK_DIR:-}"
+            fi
             TERMUX_PREFIX=$TERMUX_PREFIX \
             TARGET_ARCH=$TARGET_ARCH \
             RPM_INCLUDE_DIR="$RPM_INCLUDE_DIR" \

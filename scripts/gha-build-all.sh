@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
 
 # Dependency order
-ORDER=(zchunk libcomps libsolv librepo dnf5 rpm)
+ORDER=(zchunk libcomps libsolv librepo rpm dnf5)
 COMPONENT="${1:-all}"
 
 echo "=== dnf-for-termux: CI Build Orchestrator ==="
