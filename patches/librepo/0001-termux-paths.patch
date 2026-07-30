@@ -1,0 +1,53 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Wed, 29 Jul 2026 22:22:50 -0600
+Subject: [PATCH 1/2] Fix GPG socket paths for Termux
+
+On Termux/Android, /run/gnupg and /run/user don't exist.
+Use GLib's g_get_tmp_dir() ($TMPDIR) instead to create the
+gpg-agent socket directory tree.
+
+The original code creates /run/gnupg/user/$UID (or /run/user/$UID)
+so that gpg-agent places its socket there. In Termux we create
+the same structure under $TMPDIR (e.g. $PREFIX/tmp/gnupg/user/$UID).
+
+g_get_tmp_dir() is already used elsewhere in librepo (util.c) and
+GLib is available via the included <glib.h> header.
+
+--- a/librepo/gpg_gpgme.c
++++ b/librepo/gpg_gpgme.c
+@@ -71,6 +71,36 @@ static void
+ lr_gpg_ensure_socket_dir_exists()
+ {
++#ifdef __ANDROID__
++    /* Termux/Android: /run/gnupg or /run/user don't exist.
++     * Use g_get_tmp_dir() ($TMPDIR) instead. */
++    {
++        const char *tmpdir = g_get_tmp_dir();
++        const uid_t uid = getuid();
++        char dirname[1024];
++
++        /* Create $TMPDIR/gnupg/ */
++        snprintf(dirname, sizeof(dirname), "%s/gnupg", tmpdir);
++        if (mkdir(dirname, 0755) != 0 && errno != EEXIST)
++            g_debug("lr_gpg_ensure_socket_dir_exists: can't create %s: %s",
++                    dirname, g_strerror(errno));
++
++        /* Create $TMPDIR/gnupg/user/ */
++        snprintf(dirname, sizeof(dirname), "%s/gnupg/user", tmpdir);
++        if (mkdir(dirname, 0755) != 0 && errno != EEXIST)
++            g_debug("lr_gpg_ensure_socket_dir_exists: can't create %s: %s",
++                    dirname, g_strerror(errno));
++
++        /* Create $TMPDIR/gnupg/user/$UID/ */
++        snprintf(dirname, sizeof(dirname), "%s/gnupg/user/%ju",
++                 tmpdir, (uintmax_t)uid);
++        if (mkdir(dirname, 0700) != 0 && errno != EEXIST)
++            g_debug("lr_gpg_ensure_socket_dir_exists: can't create %s: %s",
++                    dirname, g_strerror(errno));
++
++        return;
++    }
++#endif
+ #ifdef USE_RUN_GNUPG_USER_SOCKET
+     const char *templates[] = { "/run/gnupg", "/run/gnupg/user", "/run/gnupg/user/%ju", NULL };
+     const mode_t modes[] = { 0755, 0755, 0700, 0 };

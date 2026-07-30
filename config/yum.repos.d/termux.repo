@@ -1,6 +1,8 @@
-# termux.repo - Repositorios Termux para DNF
+# termux.repo - Repositorio base Termux para DNF
 [termux]
-name=Termux Packages
-baseurl=https://packages.termux.dev/apt/termux-main
+name=Termux RPM Repository
+baseurl=https://packages.termux.dev/rpm/
 enabled=1
 gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.termux.dev/rpm/termux-rpm.gpg

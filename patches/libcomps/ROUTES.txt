@@ -1,0 +1,33 @@
+# Rutas FHS encontradas en libcomps
+# Archivos de configuración de rutas que necesitan parche Termux ($PREFIX-based)
+#
+# $PREFIX = /data/data/com.termux/files/usr
+# En Termux NO existe /etc, /var, /usr reales — todo va bajo $PREFIX
+#
+# Generado: análisis de source/libcomps/
+# ============================================================================
+
+# ============================================================================
+# OBSERVACIÓN GENERAL
+# libcomps NO contiene rutas FHS hardcodeadas. Las únicas referencias a
+# "/etc", "/var", "/usr", "/tmp" son en nombres de variables temporales
+# (tmpdata, tmpch) que no son rutas del sistema.
+# ============================================================================
+
+# ============================================================================
+# ARCHIVOS ANALIZADOS
+# ============================================================================
+
+# source/libcomps/libcomps/src/comps_objradix.c
+# Línea 414: tmpch = rtdata->key[x] — variable local TEMPORAL, no es ruta.
+# ---
+
+# source/libcomps/libcomps/src/comps_set.c
+# Línea 170: tmpdata = comps_hslist_data_at(set2->data, at) — variable local TEMPORAL, no es ruta.
+# ---
+
+# ============================================================================
+# CONCLUSIÓN
+# libcomps NO necesita parches de rutas Termux.
+# No hay rutas FHS (/etc/, /var/, /usr/, /tmp/) en el código fuente productivo.
+# ============================================================================

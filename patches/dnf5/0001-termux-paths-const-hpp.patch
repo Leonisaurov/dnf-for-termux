@@ -1,0 +1,86 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Wed, 29 Jul 2026 22:54:00 -0600
+Subject: [PATCH 1/1] Adapt dnf5 paths for Termux ($PREFIX)
+
+Replace FHS hardcoded paths with Termux-compatible paths.
+TERMUX_PREFIX is auto-detected via __ANDROID__ at compile time.
+
+diff --git a/include/libdnf5/conf/const.hpp b/include/libdnf5/conf/const.hpp
+--- a/include/libdnf5/conf/const.hpp
++++ b/include/libdnf5/conf/const.hpp
+@@ -25,31 +25,39 @@
+ #include <vector>
+ 
+ 
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX ""
++#endif
++#endif
++#define PREFIX_PATH(path) TERMUX_PREFIX path
+ namespace libdnf5 {
+ 
+-constexpr const char * PERSISTDIR = "/var/lib/dnf";
+-constexpr const char * SYSTEM_STATE_DIR = "/usr/lib/sysimage/libdnf5";
+-constexpr const char * SYSTEM_CACHEDIR = "/var/cache/libdnf5";
++constexpr const char * PERSISTDIR = PREFIX_PATH("/var/lib/dnf");
++constexpr const char * SYSTEM_STATE_DIR = PREFIX_PATH("/lib/sysimage/libdnf5");
++constexpr const char * SYSTEM_CACHEDIR = PREFIX_PATH("/var/cache/libdnf5");
+ 
+-constexpr const char * CONF_FILENAME = "/etc/dnf/dnf.conf";
+-constexpr const char * CONF_DIRECTORY = "/etc/dnf/libdnf5.conf.d";
++constexpr const char * CONF_FILENAME = PREFIX_PATH("/etc/dnf/dnf.conf");
++constexpr const char * CONF_DIRECTORY = PREFIX_PATH("/etc/dnf/libdnf5.conf.d");
+ 
+-constexpr const char * VERSIONLOCK_CONF_FILENAME = "/etc/dnf/versionlock.toml";
++constexpr const char * VERSIONLOCK_CONF_FILENAME = PREFIX_PATH("/etc/dnf/versionlock.toml");
+ 
+-constexpr const char * PLUGINS_CONF_DIR = "/etc/dnf/libdnf5-plugins";
+-const std::vector<std::string> PLUGINS_CONF_DIRS{"/etc/dnf/libdnf5-plugins", "/usr/share/dnf5/libdnf.plugins.conf.d"};
++constexpr const char * PLUGINS_CONF_DIR = PREFIX_PATH("/etc/dnf/libdnf5-plugins");
++const std::vector<std::string> PLUGINS_CONF_DIRS{PREFIX_PATH("/etc/dnf/libdnf5-plugins"), PREFIX_PATH("/share/dnf5/libdnf.plugins.conf.d")};
+ 
+ const std::vector<std::string> REPOSITORY_CONF_DIRS{
+-    "/etc/yum.repos.d", "/etc/distro.repos.d", "/usr/share/dnf5/repos.d"};
+-constexpr const char * REPOS_OVERRIDE_DIR = "/etc/dnf/repos.override.d";
++    PREFIX_PATH("/etc/yum.repos.d"), PREFIX_PATH("/etc/distro.repos.d"), PREFIX_PATH("/share/dnf5/repos.d")};
++constexpr const char * REPOS_OVERRIDE_DIR = PREFIX_PATH("/etc/dnf/repos.override.d");
+ 
+-constexpr const char * TRANSACTION_LOCK_FILEPATH = "/run/dnf/rpmtransaction.lock";
++constexpr const char * TRANSACTION_LOCK_FILEPATH = PREFIX_PATH("/var/run/dnf/rpmtransaction.lock");
+ constexpr const char * SYSTEM_REPO_LOCK_FILENAME = "system-repo.lock";
+ 
+ // More important varsdirs must be on the end of vector
+-const std::vector<std::string> VARS_DIRS{"/usr/share/dnf5/vars.d", "/etc/dnf/vars"};
++const std::vector<std::string> VARS_DIRS{PREFIX_PATH("/share/dnf5/vars.d"), PREFIX_PATH("/etc/dnf/vars")};
+ 
+-constexpr char VENDOR_CONF_DIR[] = "/etc/dnf/vendors.d";
++constexpr char VENDOR_CONF_DIR[] = PREFIX_PATH("/etc/dnf/vendors.d");
+ 
+ const std::vector<std::string> GROUP_PACKAGE_TYPES{"mandatory", "default", "conditional"};
+ const std::vector<std::string> INSTALLONLYPKGS{
+
+diff --git a/dnf5daemon-server/const.hpp b/dnf5daemon-server/const.hpp
+--- a/dnf5daemon-server/const.hpp
++++ b/dnf5daemon-server/const.hpp
+@@ -20,9 +20,17 @@
+ #ifndef DNF5DAEMON_SERVER_CONST_HPP
+ #define DNF5DAEMON_SERVER_CONST_HPP
+ 
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX ""
++#endif
++#endif
++#define PREFIX_PATH(path) TERMUX_PREFIX path
+ namespace dnfdaemon {
+ 
+-constexpr const char * CONF_FILENAME = "/etc/dnf/dnf5daemon-server.conf";
++constexpr const char * CONF_FILENAME = PREFIX_PATH("/etc/dnf/dnf5daemon-server.conf");
+ 
+ }  // namespace dnfdaemon
+ 

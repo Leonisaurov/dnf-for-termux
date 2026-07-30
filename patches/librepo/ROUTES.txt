@@ -1,0 +1,72 @@
+# Rutas FHS encontradas en librepo
+# Archivos de configuración de rutas que necesitan parche Termux ($PREFIX-based)
+#
+# $PREFIX = /data/data/com.termux/files/usr
+# En Termux NO existe /etc, /var, /usr reales — todo va bajo $PREFIX
+#
+# Generado: análisis de source/librepo/
+# ============================================================================
+
+# ============================================================================
+# OBSERVACIÓN GENERAL
+# librepo usa relativamente pocas rutas FHS hardcodeadas en su código fuente.
+# La mayoría de las rutas se configuran en tiempo de ejecución a través de
+# las opciones de manejo (handle options).
+# ============================================================================
+
+# ============================================================================
+# 1. REPOCONF - RUTAS DE CONFIGURACIÓN
+# ============================================================================
+
+# Archivo: source/librepo/librepo/repoconf.h
+# Línea 133 - / ** Load a directory with *.repo files (e.g. /etc/yum.repos.d/)
+# Propósito: Documentación de carga de directorios .repo
+# ---
+
+# ============================================================================
+# 2. GPG - DIRECTORIO DE CACHÉ
+# ============================================================================
+
+# Archivo: source/librepo/librepo/gpg_gpgme.c
+# Línea 47 - home directory, which is under '/var/cache/yum/metadata/' and this was
+# Propósito: Comentario/documentación sobre directorio GPG home
+# Parche necesario en runtime: las rutas de caché vienen del handle
+# ---
+
+# ============================================================================
+# 3. DOWNLOADER - COMENTARIOS
+# ============================================================================
+
+# Archivo: source/librepo/librepo/downloader.c
+# Línea 550 - // TODO: See parse150 in /usr/lib64/python2.7/ftplib.py
+# Propósito: Comentario de referencia (no es ruta operativa)
+# ---
+
+# ============================================================================
+# 4. ARCHIVOS DE TEST (no críticos para producción)
+# ============================================================================
+
+# Archivo: source/librepo/tests/test_handle.c
+# Líneas 55-60:
+#   "/etc/cert.pem", "/etc/cert.key", "/etc/ca.pem",
+#   "/etc/proxy_cert.pem", "/etc/proxy_cert.key", "/etc/proxy_ca.pem"
+# Propósito: Tests unitarios de certificados (no afecta producción)
+# ---
+
+# Archivo: source/librepo/tests/test_handle.c
+# Línea 54 - "/var/cache/fastestmirror.librepo"
+# Propósito: Test unitario de caché (no afecta producción)
+# ---
+
+# Archivo: source/librepo/tests/test_repoconf.c
+# Líneas 477-480:
+#   "file:///etc/ssl.cert", "file:///etc/client.cert", "file:///etc/client.key"
+# Propósito: Tests unitarios de rutas de certificados (no afecta producción)
+# ---
+
+# ============================================================================
+# RESUMEN
+# librepo tiene mínimas rutas hardcodeadas en source/productivo.
+# Las rutas de configuración (repos, caché, etc.) se pasan desde DNF5
+# vía lr_handle_setopt() y lr_url_setopt(), no están hardcodeadas en librepo.
+# ============================================================================

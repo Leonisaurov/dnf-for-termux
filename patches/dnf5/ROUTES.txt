@@ -1,0 +1,276 @@
+# Rutas FHS encontradas en DNF5
+# Archivos de configuración de rutas que necesitan parche Termux ($PREFIX-based)
+#
+# $PREFIX = /data/data/com.termux/files/usr
+# En Termux NO existe /etc, /var, /usr reales — todo va bajo $PREFIX
+#
+# Generado: análisis de source/dnf5/
+# ============================================================================
+
+# ============================================================================
+# 1. CONSTANTES PRINCIPALES DE RUTAS
+# ============================================================================
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 30 - constexpr const char * PERSISTDIR = "/var/lib/dnf";
+# Propósito: Directorio de persistencia de datos de DNF (historial de transacciones, etc.)
+# Parche necesario: "$PREFIX/var/lib/dnf"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 31 - constexpr const char * SYSTEM_STATE_DIR = "/usr/lib/sysimage/libdnf5";
+# Propósito: Directorio de estado del sistema para libdnf5
+# Parche necesario: "$PREFIX/lib/sysimage/libdnf5"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 32 - constexpr const char * SYSTEM_CACHEDIR = "/var/cache/libdnf5";
+# Propósito: Directorio de caché del sistema para libdnf5
+# Parche necesario: "$PREFIX/var/cache/libdnf5"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 34 - constexpr const char * CONF_FILENAME = "/etc/dnf/dnf.conf";
+# Propósito: Archivo de configuración principal de DNF
+# Parche necesario: "$PREFIX/etc/dnf/dnf.conf"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 35 - constexpr const char * CONF_DIRECTORY = "/etc/dnf/libdnf5.conf.d";
+# Propósito: Directorio de configuración drop-in para libdnf5
+# Parche necesario: "$PREFIX/etc/dnf/libdnf5.conf.d"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 37 - constexpr const char * VERSIONLOCK_CONF_FILENAME = "/etc/dnf/versionlock.toml";
+# Propósito: Archivo de configuración de versionlock
+# Parche necesario: "$PREFIX/etc/dnf/versionlock.toml"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 39 - constexpr const char * PLUGINS_CONF_DIR = "/etc/dnf/libdnf5-plugins";
+# Propósito: Directorio de configuración de plugins
+# Parche necesario: "$PREFIX/etc/dnf/libdnf5-plugins"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 40 - const std::vector<std::string> PLUGINS_CONF_DIRS{"/etc/dnf/libdnf5-plugins", "/usr/share/dnf5/libdnf.plugins.conf.d"};
+# Propósito: Directorios de configuración de plugins (con fallback)
+# Parche necesario: "$PREFIX/etc/dnf/libdnf5-plugins", "$PREFIX/share/dnf5/libdnf.plugins.conf.d"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Líneas 42-43 - const std::vector<std::string> REPOSITORY_CONF_DIRS{"/etc/yum.repos.d", "/etc/distro.repos.d", "/usr/share/dnf5/repos.d"};
+# Propósito: Directorios de configuración de repositorios
+# Parche necesario: "$PREFIX/etc/yum.repos.d", "$PREFIX/etc/distro.repos.d", "$PREFIX/share/dnf5/repos.d"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 44 - constexpr const char * REPOS_OVERRIDE_DIR = "/etc/dnf/repos.override.d";
+# Propósito: Directorio de override de repositorios
+# Parche necesario: "$PREFIX/etc/dnf/repos.override.d"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 46 - constexpr const char * TRANSACTION_LOCK_FILEPATH = "/run/dnf/rpmtransaction.lock";
+# Propósito: Archivo de lock de transacciones RPM
+# Parche necesario: "$PREFIX/var/run/dnf/rpmtransaction.lock" (Termux no tiene /run)
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 50 - const std::vector<std::string> VARS_DIRS{"/usr/share/dnf5/vars.d", "/etc/dnf/vars"};
+# Propósito: Directorios de variables de DNF
+# Parche necesario: "$PREFIX/share/dnf5/vars.d", "$PREFIX/etc/dnf/vars"
+# ---
+
+# Archivo: source/dnf5/include/libdnf5/conf/const.hpp
+# Línea 52 - constexpr char VENDOR_CONF_DIR[] = "/etc/dnf/vendors.d";
+# Propósito: Directorio de configuración de vendors
+# Parche necesario: "$PREFIX/etc/dnf/vendors.d"
+# ---
+
+# ============================================================================
+# 2. CONFIG MAIN - LOGDIR Y OTRAS RUTAS
+# ============================================================================
+
+# Archivo: source/dnf5/libdnf5/conf/config_main.cpp
+# Línea 137 - OptionPath logdir{geteuid() == 0 ? "/var/log" : libdnf5::xdg::get_user_state_dir()};
+# Propósito: Directorio de logs
+# Parche necesario: "$PREFIX/var/log"
+# ---
+
+# Archivo: source/dnf5/libdnf5/conf/config_main.cpp
+# Línea 242 - std::vector<std::string>{"glob:/etc/dnf/usr-drift-protected-paths.d/*.conf"}
+# Propósito: Archivos de protección contra desviación de rutas del sistema
+# Parche necesario: "$PREFIX/etc/dnf/usr-drift-protected-paths.d/*.conf"
+# ---
+
+# Archivo: source/dnf5/libdnf5/conf/config_main.cpp
+# Línea 259 - OptionStringAppendList protected_packages{std::vector<std::string>{"dnf5", "glob:/etc/dnf/protected.d/*.conf"}};
+# Propósito: Archivos de paquetes protegidos
+# Parche necesario: "$PREFIX/etc/dnf/protected.d/*.conf"
+# ---
+
+# ============================================================================
+# 3. DNF5-DAEMON SERVER
+# ============================================================================
+
+# Archivo: source/dnf5/dnf5daemon-server/const.hpp
+# Línea 25 - constexpr const char * CONF_FILENAME = "/etc/dnf/dnf5daemon-server.conf";
+# Propósito: Configuración del servidor DNF5 daemon
+# Parche necesario: "$PREFIX/etc/dnf/dnf5daemon-server.conf"
+# ---
+
+# ============================================================================
+# 4. PLUGIN AUTOMÁTICO
+# ============================================================================
+
+# Archivo: source/dnf5/dnf5-plugins/automatic_plugin/automatic.cpp
+# Línea 301 - {"/usr/share/dnf5/dnf5-plugins", false}, {"/etc/dnf/dnf5-plugins", true}, {"/etc/dnf", false}
+# Propósito: Posibles rutas de configuración automática
+# Parche necesario: "$PREFIX/share/dnf5/dnf5-plugins", "$PREFIX/etc/dnf/dnf5-plugins", "$PREFIX/etc/dnf"
+# ---
+
+# Archivo: source/dnf5/dnf5-plugins/automatic_plugin/emitters.cpp
+# Línea 39 - constexpr const char * MOTD_FILENAME = "/etc/motd.d/dnf5-automatic";
+# Propósito: Archivo de mensaje del día para DNF5 automático
+# Parche necesario: "$PREFIX/etc/motd.d/dnf5-automatic"
+# ---
+
+# ============================================================================
+# 5. PLUGIN COPR
+# ============================================================================
+
+# Archivo: source/dnf5/dnf5-plugins/copr_plugin/copr_constants.hpp
+# Línea 58 - constexpr const char * COPR_REPO_DIRECTORY = "/etc/yum.repos.d";
+# Propósito: Directorio de repos para COPR
+# Parche necesario: "$PREFIX/etc/yum.repos.d"
+# ---
+
+# Archivo: source/dnf5/dnf5-plugins/copr_plugin/copr_config.cpp
+# Línea 47 - etc_dir = "/etc";
+# Propósito: Directorio base de configuración para COPR
+# Parche necesario: "$PREFIX/etc"
+# ---
+
+# Archivo: source/dnf5/dnf5-plugins/copr_plugin/copr_config.cpp
+# Línea 51 - load_copr_config_file("/usr/share/dnf/plugins/copr.vendor.conf");
+# Propósito: Archivo de configuración vendor de COPR
+# Parche necesario: "$PREFIX/share/dnf/plugins/copr.vendor.conf"
+# ---
+
+# Archivo: source/dnf5/dnf5-plugins/copr_plugin/json.cpp
+# Línea 31 - auto temp_file = libdnf5::utils::fs::TempFile("/tmp", "dnf5-copr-plugin");
+# Propósito: Archivo temporal para descargas JSON de COPR
+# ⚠️ USAR $TMPDIR en vez de /tmp en Termux
+# Parche necesario: usar $TMPDIR
+# ---
+
+# ============================================================================
+# 6. COMANDOS DNF5
+# ============================================================================
+
+# Archivo: source/dnf5/dnf5/commands/offline/offline.hpp
+# Línea 29 - const std::filesystem::path PATH_TO_PLYMOUTH{"/usr/bin/plymouth"};
+# Propósito: Ruta al binario plymouth (actualización offline)
+# Parche necesario: "$PREFIX/bin/plymouth"
+# ---
+
+# Archivo: source/dnf5/dnf5/commands/offline/offline.hpp
+# Línea 30 - const std::filesystem::path PATH_TO_JOURNALCTL{"/usr/bin/journalctl"};
+# Propósito: Ruta al binario journalctl (actualización offline)
+# Parche necesario: "$PREFIX/bin/journalctl"
+# ---
+
+# Archivo: source/dnf5/dnf5/commands/provides/provides.cpp
+# Línea 89-90 - "/usr/bin/" + spec, "/usr/sbin/" + spec
+# Propósito: Prefijos de búsqueda de binarios para comando 'provides'
+# Parche necesario: "$PREFIX/bin/", "$PREFIX/bin/" (Termux no separa sbin)
+# ---
+
+# ============================================================================
+# 7. CLIENTE LIBSOLV
+# ============================================================================
+
+# Archivo: source/dnf5/libdnf5-cli/output/provides.cpp
+# Línea 87 - std::vector<std::string> prefix{"/bin/", "/sbin/", "/usr/bin/", "/usr/sbin/"};
+# Propósito: Prefijos de búsqueda de binarios en provides CLI
+# Parche necesario: "$PREFIX/bin/" (y eliminar duplicados)
+# ---
+
+# Archivo: source/dnf5/libdnf5/rpm/package_query.cpp
+# Línea 2873 - std::array<std::string, 2> binary_paths{"/usr/bin/", "/usr/sbin/"};
+# Propósito: Prefijos de búsqueda de binarios en consultas RPM
+# Parche necesario: "$PREFIX/bin/" (Termux unifica bin/ y sbin/)
+# ---
+
+# ============================================================================
+# 8. OS-RELEASE
+# ============================================================================
+
+# Archivo: source/dnf5/include/libdnf5/utils/os_release.hpp
+# Línea 38 - explicit OSRelease(std::filesystem::path path = "/etc/os-release")
+# Propósito: Ruta por defecto al archivo os-release
+# Parche necesario: "$PREFIX/etc/os-release"
+# ---
+
+# ============================================================================
+# 9. PLUGIN RHSM
+# ============================================================================
+
+# Archivo: source/dnf5/libdnf5-plugins/rhsm/rhsm.cpp
+# Línea 92 - if (g_file_test("/var/lib/rhsm", G_FILE_TEST_EXISTS))
+# Propósito: Verificar existencia de directorio RHSM
+# Parche necesario: "$PREFIX/var/lib/rhsm"
+# ---
+
+# ============================================================================
+# 10. CMAKE - DIRECTORIOS DE INSTALACIÓN
+# ============================================================================
+
+# Archivo: source/dnf5/CMakeLists.txt
+# Línea 10 - set(SYSTEMD_DIR "/usr/lib/systemd/system" CACHE PATH "...")
+# Propósito: Directorio de unidades systemd (no aplica en Termux)
+# ---
+
+# Archivo: source/dnf5/CMakeLists.txt
+# Línea 11 - set(TMPFILES_DIR "/usr/lib/tmpfiles.d" CACHE PATH "...")
+# Propósito: Directorio tmpfiles.d (no aplica en Termux)
+# ---
+
+# Archivo: source/dnf5/dnf5/CMakeLists.txt
+# Línea 60 - set (BASH_COMPLETION_COMPLETIONSDIR "/etc/bash_completion.d")
+# Propósito: Directorio de completado bash
+# Parche necesario: "$PREFIX/etc/bash_completion.d"
+# ---
+
+# Archivo: source/dnf5/dnf5daemon-server/dbus/CMakeLists.txt
+# Línea 1 - set(SYSTEMD_UNIT_DIR /usr/lib/systemd/system)
+# Propósito: Directorio de unidades systemd (no aplica)
+# ---
+
+# Archivo: source/dnf5/dnf5daemon-server/dbus/CMakeLists.txt
+# Línea 2 - set(DBUS_SHARE_DIR /usr/share/dbus-1)
+# Propósito: Directorio de configuración DBus
+# Parche necesario: "$PREFIX/share/dbus-1"
+# ---
+
+# Archivo: source/dnf5/dnf5daemon-server/polkit/CMakeLists.txt
+# Línea 1 - SET(POLKIT_DIR /usr/share/polkit-1)
+# Propósito: Directorio de políticas Polkit
+# Parche necesario: "$PREFIX/share/polkit-1"
+# ---
+
+# ============================================================================
+# 11. RUTAS EN ARCHIVOS DE TEST (no críticos pero referencia)
+# ============================================================================
+
+# Archivo: source/dnf5/test/libdnf5/rpm/test_package.cpp
+# Líneas 166-167 - "/etc/pkg.conf", "/etc/pkg.conf.d"
+# Propósito: Tests unitarios (no requieren parche en runtime)
+# ---
+
+# Archivo: source/dnf5/test/libdnf5/logger/test_file_logger.cpp
+# Línea 38 - auto temp_logdir = path("/var/log/FileLoggerTestLogDir");
+# Propósito: Test unitario (no requiere parche en runtime)
+# ---

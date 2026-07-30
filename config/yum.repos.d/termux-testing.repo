@@ -1,0 +1,8 @@
+# termux-testing.repo - Repositorio de pruebas Termux para DNF
+[termux-testing]
+name=Termux Testing RPM Repository
+baseurl=https://packages.termux.dev/rpm/testing/
+enabled=0
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.termux.dev/rpm/termux-rpm.gpg
