@@ -108,7 +108,6 @@ jobs:
           - libcomps
           - libsolv
           - librepo
-          - dnf5
           - rpm
     steps:
       - uses: actions/checkout@v4
@@ -148,81 +147,7 @@ jobs:
             echo "SKIP_LIBREPO=true" >> $GITHUB_ENV
           fi
 
-      - name: Restore RPM cache
-        if: matrix.component == 'dnf5'
-        uses: actions/cache/restore@v4
-        with:
-          path: build/termux/rpm/staging/
-          key: termux-rpm-
-          restore-keys: termux-rpm-
-          fail-on-cache-miss: false
 
-      - name: Restore libsolv cache
-        if: matrix.component == 'dnf5'
-        uses: actions/cache/restore@v4
-        with:
-          path: build/termux/libsolv/staging/
-          key: termux-libsolv-
-          restore-keys: termux-libsolv-
-          fail-on-cache-miss: false
-
-      - name: Restore librepo cache
-        if: matrix.component == 'dnf5'
-        uses: actions/cache/restore@v4
-        with:
-          path: build/termux/librepo/staging/
-          key: termux-librepo-
-          restore-keys: termux-librepo-
-          fail-on-cache-miss: false
-
-      - name: Restore libcomps cache
-        if: matrix.component == 'dnf5'
-        uses: actions/cache/restore@v4
-        with:
-          path: build/termux/libcomps/staging/
-          key: termux-libcomps-
-          restore-keys: termux-libcomps-
-          fail-on-cache-miss: false
-
-      - name: Restore zchunk cache
-        if: matrix.component == 'dnf5'
-        uses: actions/cache/restore@v4
-        with:
-          path: build/termux/zchunk/staging/
-          key: termux-zchunk-
-          restore-keys: termux-zchunk-
-          fail-on-cache-miss: false
-
-      - name: Restore dependency caches (for dnf5)
-        if: matrix.component == 'dnf5'
-        run: |
-          # RPM
-          if [ -d "build/termux/rpm/staging/$TERMUX_PREFIX/include/rpm" ]; then
-            echo "✅ RPM headers found"
-            echo "RPM_DIR=$PWD/build/termux/rpm/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
-          else
-            echo "⚠️ RPM not cached — may fail"
-          fi
-          # libsolv
-          if [ -d "build/termux/libsolv/staging/$TERMUX_PREFIX/include/solv" ]; then
-            echo "✅ libsolv headers found"
-            echo "LIBSOLV_DIR=$PWD/build/termux/libsolv/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
-          fi
-          # librepo
-          if [ -d "build/termux/librepo/staging/$TERMUX_PREFIX/include/librepo" ]; then
-            echo "✅ librepo headers found"
-            echo "LIBREPO_DIR=$PWD/build/termux/librepo/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
-          fi
-          # libcomps
-          if [ -d "build/termux/libcomps/staging/$TERMUX_PREFIX/include/libcomps" ]; then
-            echo "✅ libcomps headers found"
-            echo "LIBCOMPS_DIR=$PWD/build/termux/libcomps/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
-          fi
-          # zchunk
-          if [ -d "build/termux/zchunk/staging/$TERMUX_PREFIX/include/zck.h" ]; then
-            echo "✅ zchunk headers found"
-            echo "ZCHUNK_DIR=$PWD/build/termux/zchunk/staging/$TERMUX_PREFIX" >> $GITHUB_ENV
-          fi
 
       - name: Build ${{ matrix.component }}
         run: |
@@ -264,11 +189,88 @@ jobs:
           if-no-files-found: ignore
 
   # --------------------------------------------------------------------------
+  # BUILD DNF5: Sequential build after dependencies are ready
+  # --------------------------------------------------------------------------
+  build-dnf5:
+    name: "📦 Build dnf5"
+    needs: [build-component]
+    if: always()
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/package-builder:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Download all dependency artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/deps
+          merge-multiple: true
+
+      - name: Set up staging from artifacts
+        run: |
+          TERMUX_PREFIX="/data/data/com.termux/files/usr"
+          # Create staging dirs from downloaded artifacts
+          for dep in rpm libsolv librepo libcomps zchunk; do
+            SRC="/tmp/deps/${dep}-*"
+            DST="build/termux/${dep}/staging"
+            mkdir -p "$DST"
+            # Find and copy if artifact exists
+            if ls $SRC &>/dev/null; then
+              cp -r $SRC/* "$DST/" 2>/dev/null || true
+              echo "✅ $dep restored to $DST"
+            else
+              echo "⚠️  $dep artifact not found"
+            fi
+          done
+
+      - name: Build dnf5
+        run: |
+          TERMUX_PREFIX="/data/data/com.termux/files/usr"
+
+          # Apply patches
+          for patch in patches/dnf5/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $(basename $patch)"
+              patch -p1 -d "source/dnf5" < "$patch" || true
+            fi
+          done
+
+          # Export dependency paths for dnf5 build
+          export RPM_DIR="$PWD/build/termux/rpm/staging/$TERMUX_PREFIX"
+          export LIBSOLV_DIR="$PWD/build/termux/libsolv/staging/$TERMUX_PREFIX"
+          export LIBREPO_DIR="$PWD/build/termux/librepo/staging/$TERMUX_PREFIX"
+          export LIBCOMPS_DIR="$PWD/build/termux/libcomps/staging/$TERMUX_PREFIX"
+          export ZCHUNK_DIR="$PWD/build/termux/zchunk/staging/$TERMUX_PREFIX"
+
+          echo "RPM_DIR=$RPM_DIR"
+          echo "LIBSOLV_DIR=$LIBSOLV_DIR"
+
+          # Run build script
+          TERMUX_PREFIX=$TERMUX_PREFIX \
+          RPM_DIR="$RPM_DIR" \
+          LIBSOLV_DIR="$LIBSOLV_DIR" \
+          LIBREPO_DIR="$LIBREPO_DIR" \
+          LIBCOMPS_DIR="$LIBCOMPS_DIR" \
+          ZCHUNK_DIR="$ZCHUNK_DIR" \
+          ./build/termux/dnf5/build.sh
+
+      - name: Upload dnf5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dnf5-${{ github.sha }}
+          path: build/termux/dnf5/staging/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # --------------------------------------------------------------------------
   # REPOSITORY: Generate RPM repository metadata
   # --------------------------------------------------------------------------
   create-repo:
     name: "📚 Create RPM Repository"
-    needs: [build-component]
+    needs: [build-component, build-dnf5]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -304,7 +306,7 @@ jobs:
   # --------------------------------------------------------------------------
   release:
     name: "🏷️ Release"
-    needs: [build-component]
+    needs: [build-component, build-dnf5]
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
