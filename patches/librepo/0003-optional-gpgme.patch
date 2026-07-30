@@ -1,5 +1,5 @@
---- source/librepo/CMakeLists.txt.orig	2026-07-30 02:37:27.738244095 -0600
-+++ source/librepo/CMakeLists.txt	2026-07-30 02:38:14.938244098 -0600
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
 @@ -44,9 +44,14 @@
      ADD_DEFINITIONS(-DUSE_GPGME)
      PKG_SEARCH_MODULE(GPGME gpgme)
