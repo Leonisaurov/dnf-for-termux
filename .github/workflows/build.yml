@@ -428,7 +428,7 @@ jobs:
   # ==========================================================================
   check-cache-dnf5:
     name: "🔍 Check dnf5"
-    needs: [resolve-targets, build-zchunk, build-libcomps, build-libsolv, build-rpm, build-librepo]
+    needs: [resolve-targets]
     if: needs.resolve-targets.outputs.dnf5 == 'true'
     runs-on: ubuntu-latest
     outputs:
@@ -504,8 +504,8 @@ jobs:
   # ==========================================================================
   build-dnf5:
     name: "📦 Build dnf5"
-    needs: [check-cache-dnf5]
-    if: needs.check-cache-dnf5.outputs.cache-hit != 'true'
+    needs: [check-cache-dnf5, build-libsolv]
+    if: ${{ always() && needs.check-cache-dnf5.outputs.cache-hit != 'true' && needs.build-libsolv.result != 'failure' }}
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/termux/package-builder:latest
