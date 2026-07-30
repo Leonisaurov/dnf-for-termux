@@ -155,9 +155,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.component }}-${{ github.sha }}
-          path: /home/builder/.termux-build/${{ matrix.component }}/output/
+          path: build/termux/${{ matrix.component }}/staging/
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: ignore
 
   # --------------------------------------------------------------------------
   # REPOSITORY: Generate RPM repository metadata
@@ -179,15 +179,14 @@ jobs:
       - name: Create RPM repository
         run: |
           mkdir -p /tmp/repo
-          find /tmp/artifacts -name "*.rpm" -exec cp {} /tmp/repo/ \;
-          
-          # Install createrepo_c
-          sudo apt-get update && sudo apt-get install -y createrepo_c
-          
-          # Generate repo metadata
-          createrepo_c /tmp/repo
-          
-          echo "Repository created with $(ls /tmp/repo/*.rpm 2>/dev/null | wc -l) packages"
+          if [ -d /tmp/artifacts ] && [ "$(find /tmp/artifacts -name '*.rpm' 2>/dev/null | head -1)" != "" ]; then
+            find /tmp/artifacts -name "*.rpm" -exec cp {} /tmp/repo/ \;
+            sudo apt-get update && sudo apt-get install -y createrepo_c
+            createrepo_c /tmp/repo
+            echo "Repository created with $(ls /tmp/repo/*.rpm 2>/dev/null | wc -l) packages"
+          else
+            echo "⚠️ No RPM artifacts found — skipping repository creation"
+          fi
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
