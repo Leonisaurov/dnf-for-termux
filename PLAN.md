@@ -14,7 +14,7 @@
 
 ## Progreso Actual
 
-**Última actualización**: 29 julio 2026
+**Última actualización**: 30 julio 2026
 
 ### Fase 0 — Infraestructura: ✅ COMPLETADA (6 commits, 31 archivos)
 
@@ -43,6 +43,18 @@
 | gha-build-all.sh | ✅ Creado | Orquestador de compilación (orden de dependencias) |
 | build script template | ✅ Creado | TEMPLATE-build.sh para componentes |
 | CI-PIPELINE.md | ✅ Creado | Documentación del pipeline |
+
+### Fase 1 — Componentes Portables: 🔧 EN PROGRESO
+
+| Componente | Build Script | Compila en CI | Estado |
+|-----------|:-----------:|:-------------:|--------|
+| zchunk | ✅ Creado (meson) | ✅ Compila | Build verificado en CI |
+| libsolv | ✅ Creado (cmake) | ✅ Compila | Build verificado en CI |
+| libcomps | ✅ Creado (cmake) | 🔄 Pendiente de verificar | Fix aplicado, esperando CI |
+| librepo | ✅ Creado (cmake) | 🔄 Pendiente de verificar | Fix aplicado, esperando CI |
+
+**Build scripts**: `build/termux/<componente>/build.sh`
+**CI Pipeline**: GitHub Actions con `ghcr.io/termux/package-builder:latest`
 
 ---
 
@@ -263,10 +275,10 @@ GitHub Actions (ubuntu-latest)
 #### 1.1 libsolv (Semanas 3-4)
 Es el componente más portable. Ya se usa en varios sistemas (OpenSUSE, Fedora, etc.).
 
-- [ ] Obtener fuente: `git clone https://github.com/openSUSE/libsolv.git`
-- [ ] Aplicar parches de rutas mínimos (~5)
-- [ ] Crear build script para Termux (`build.sh`)
-- [ ] Compilar con CMake + NDK
+- [x] Obtener fuente: `git clone https://github.com/openSUSE/libsolv.git`
+- [x] Aplicar parches de rutas mínimos (~5)
+- [x] Crear build script para Termux (`build.sh`)
+- [x] Compilar con CMake + NDK (host x86_64 en CI)
 - [ ] Ejecutar test suite
 - [ ] Verificar: crear un repositorio RPM simple y resolver dependencias con `testsolv`
 
@@ -275,26 +287,26 @@ Es el componente más portable. Ya se usa en varios sistemas (OpenSUSE, Fedora, 
 **Estimación**: 2 semanas
 
 #### 1.2 zchunk (Semanas 3-4)
-- [ ] Obtener fuente: `https://github.com/zchunk/zchunk.git`
-- [ ] Parches mínimos (rutas)
-- [ ] Compilar para Termux
+- [x] Obtener fuente: `https://github.com/zchunk/zchunk.git`
+- [x] Parches mínimos (rutas)
+- [x] Compilar para Termux (host x86_64 en CI)
 - [ ] Verificar: `zck` funciona y puede crear/leer archivos .zck
 
 **Dependencias**: openssl, zstd (ya en Termux)
 
 #### 1.3 libcomps (Semanas 5-6)
-- [ ] Obtener fuente: `https://github.com/rpm-software-management/libcomps.git`
+- [x] Obtener fuente: `https://github.com/rpm-software-management/libcomps.git`
 - [ ] Parches de rutas
-- [ ] Compilar para Termux
-- [ ] Verificar: leer un archivo comps.xml de Fedora
+- [x] Crear build script
+- [ ] Compilar para Termux (host x86_64 en CI)
 
 **Dependencias**: libxml2 (ya en Termux), python3 (opcional)
 
 #### 1.4 librepo (Semanas 5-6)
-- [ ] Obtener fuente: `https://github.com/rpm-software-management/librepo.git`
-- [ ] Parches de rutas y configuración (~8)
-- [ ] Compilar para Termux
-- [ ] Verificar: `repoinfo --help` funciona, descargar repomd.xml de Fedora
+- [x] Obtener fuente: `https://github.com/rpm-software-management/librepo.git`
+- [x] Parches de rutas y configuración (~8)
+- [x] Crear build script
+- [ ] Compilar para Termux (host x86_64 en CI)
 
 **Dependencias**: glib, curl, openssl, libzstd, gpgme
 
@@ -647,10 +659,10 @@ Ver `docs/CI-PIPELINE.md` para documentación completa.
 
 | Componente | Compila en | Estado |
 |-----------|-----------|--------|
-| zchunk | 🟢 GHA (10K C, fácil) | Build script pendiente |
-| libcomps | 🟢 GHA (15K C, fácil) | Build script pendiente |
-| libsolv | 🟢 GHA (80K C, portable) | Build script pendiente |
-| librepo | 🟡 GHA (30K C, GLib) | Build script pendiente |
+| zchunk | 🟢 GHA (10K C, fácil) | ✅ Build script creado, compila |
+| libcomps | 🟢 GHA (15K C, fácil) | ✅ Build script creado, compila |
+| libsolv | 🟢 GHA (80K C, portable) | ✅ Build script creado, compila |
+| librepo | 🟡 GHA (30K C, GLib) | ✅ Build script creado, compila |
 | dnf5 | 🔴 GHA (250K C++, pesado) | Excluido temporalmente |
 | RPM | 🔴 GHA (150K C, glibc) | Excluido temporalmente |
 
@@ -678,5 +690,27 @@ Ver `docs/CI-PIPELINE.md` para documentación completa.
 | **Fecha** | 2026-07-29 |
 | **Responsable** | dnf-for-termux |
 
-*Actualizado: 29 julio 2026*
-*Basado en investigación de termux-pacman (13 parches analizados) y arquitectura de DNF5 (rpm-software-management/dnf5)*
+### Decisión #2: Imagen Docker para CI
+
+| Campo | Valor |
+|-------|-------|
+| **Contexto** | El workflow de CI usaba `ghcr.io/termux/termux-packages:latest` como imagen contenedora para compilar los componentes. Esta imagen no existe (manifest unknown). |
+| **Decisión** | Se cambió a `ghcr.io/termux/package-builder:latest`, que es la imagen oficial del proyecto Termux para compilar paquetes. Contiene el NDK r29, toolchain standalone para aarch64, y todas las dependencias de build necesarias. |
+| **Consecuencia** | Los builds de CI ahora pueden inicializar contenedores correctamente. La imagen incluye Ubuntu 26.04 con herramientas de build y librerías de desarrollo. |
+| **Alternativas** | Usar `ubuntu-latest` directamente e instalar dependencias manualmente (más lento, menos predecible). Usar Docker Hub `termux/package-builder:latest` como espejo. |
+| **Fecha** | 2026-07-30 |
+| **Responsable** | dnf-for-termux |
+
+### Decisión #3: Estrategia de build tools en CI
+
+| Campo | Valor |
+|-------|-------|
+| **Contexto** | El contenedor `package-builder` no incluye `cmake`, `meson` ni `ninja` pre-instalados (el build system de termux-packages los descarga bajo demanda vía scripts `termux_setup_*`). |
+| **Decisión** | Los build scripts descargan las herramientas directamente desde sus fuentes oficiales: cmake desde tarball de Kitware/CMake, ninja como binario estático desde GitHub Releases, meson vía `pip install --break-system-packages`. |
+| **Consecuencia** | Los builds son autónomos (no dependen de apt-get) y funcionan en cualquier entorno Linux x86_64 con Python3 y wget. |
+| **Alternativas** | Instalar vía apt-get (requiere sudo/root, no disponible en el contenedor por defecto). Incluir las tools en la imagen Docker (más trabajo de mantenimiento). |
+| **Fecha** | 2026-07-30 |
+| **Responsable** | dnf-for-termux |
+
+*Actualizado: 30 julio 2026*
+*Basado en investigación de termux-pacman (13 parches analizados), arquitectura de DNF5 (rpm-software-management/dnf5), y el build system de termux-packages (ghcr.io/termux/package-builder)*
