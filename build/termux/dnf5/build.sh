@@ -42,6 +42,7 @@ sudo apt-get update -qq 2>/dev/null || true
 sudo apt-get install -y -qq \
     libpopt-dev \
     libsmartcols-dev \
+    libsdbus-c++-dev \
     libsqlite3-dev libjson-c-dev libfmt-dev \
     libglib2.0-dev libxml2-dev libssl-dev \
     libzstd-dev libbz2-dev liblzma-dev 2>&1 | tail -5 || echo "Some packages may already be installed"
