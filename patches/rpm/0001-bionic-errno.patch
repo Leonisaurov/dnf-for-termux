@@ -7,7 +7,7 @@ index bf7fb450a..c19538afb 100644
  #include <errno.h>
  #include "rpmfts.h"
 -#   define __set_errno(val) (*__errno_location ()) = (val)
-+#   define __set_errno(val) (*__errno ()) = (val)
++#   define __set_errno(val) (errno = (val))
  #   define __open	open
  #   define __close	close
  #   define __fchdir	fchdir
