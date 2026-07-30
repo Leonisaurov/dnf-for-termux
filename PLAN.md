@@ -14,7 +14,7 @@
 
 ## Progreso Actual
 
-**Última actualización**: 31 julio 2026
+**Última actualización**: 1 agosto 2026
 
 ### Fase 0 — Infraestructura: ✅ COMPLETADA (6 commits, 31 archivos)
 
@@ -44,21 +44,33 @@
 | build script template | ✅ Creado | TEMPLATE-build.sh para componentes |
 | CI-PIPELINE.md | ✅ Creado | Documentación del pipeline |
 
-### Fase 1 — Componentes Portables: 🔧 3/4 COMPLETADO
+### Fase 1 — Componentes Portables: ✅ COMPLETADO
 
 | Componente | Build Script | Compila en CI | Estado |
 |-----------|:-----------:|:-------------:|--------|
 | zchunk | ✅ Creado (meson) | ✅ Compila | Build verificado |
 | libsolv | ✅ Creado (cmake) | ✅ Compila | Build verificado |
 | libcomps | ✅ Creado (cmake) | ✅ Compila | Build verificado |
-| librepo | ✅ Creado (cmake) | ❌ Bloqueado por RPM | Depende de rpm/rpmpgp.h |
+| librepo | ✅ Creado (cmake) | ✅ Compila | Via cache de RPM |
 
-**Nota**: librepo compila configuración cmake con el parche gpgme-opcional, pero 
-gpg_rpm.c incluye `<rpm/rpmpgp.h>` directamente en el código fuente. Para 
-completarlo se necesita primero RPM (ver Decisión #4).
+**Nota**: librepo requiere `rpm/rpmpgp.h` para gpg_rpm.c. Se resolvió
+con cache de CI: RPM compila primero, cachea sus headers, y librepo
+los restaura y usa. Ver Decisión #6.
 
 **Build scripts**: `build/termux/<componente>/build.sh`
 **CI Pipeline**: GitHub Actions con `ghcr.io/termux/package-builder:latest`
+
+### Fase 1.5 — RPM Package Manager: ✅ COMPLETADO
+
+| Componente | Build System | Compila en CI | Estado |
+|-----------|:-----------:|:-------------:|--------|
+| RPM 4.20.1 | ✅ Cmake + Ninja | ✅ Compila | Build verificado |
+
+**Parches**: `0001-bionic-errno.patch` (__errno_location → __errno),
+`0002-c23-goto-declaration.patch` (setmeta → setmeta:;)
+
+**Dependencias**: popt, lua, zlib, bzip2, liblzma, libzstd, libarchive,
+sqlite3, openssl, readline, iconv (todas disponibles en package-builder/Ubuntu)
 
 ---
 
@@ -738,5 +750,16 @@ Ver `docs/CI-PIPELINE.md` para documentación completa.
 | **Fecha** | 2026-07-31 |
 | **Responsable** | dnf-for-termux |
 
-*Actualizado: 31 julio 2026*
+### Decisión #6: Estrategia de caché entre componentes
+
+| Campo | Valor |
+|-------|-------|
+| **Contexto** | librepo depende de `rpm/rpmpgp.h` en `gpg_rpm.c`. Pero RPM se compila desde fuente en un job independiente del matrix CI. Cada job corre en su propio contenedor aislado, sin acceso a los archivos de otros jobs. |
+| **Decisión** | Usar `actions/cache@v4` para cachear el output de RPM (`build/termux/rpm/staging/`). librepo restaura este cache con `actions/cache/restore@v4` y pasa los headers/librerías vía `RPM_INCLUDE_DIR` y `RPM_LIB_DIR` a su build script. |
+| **Consecuencia** | Los headers de RPM persisten entre runs de CI. Si el cache expira, librepo se salta automáticamente (`SKIP_LIBREPO=true`). La primera vez que corre el CI, RPM compila primero y librepo se salta; en runs subsecuentes ambos compilan. |
+| **Alternativas** | Hacer librepo dependiente de RPM vía `needs:` (jobs secuenciales, más lentos). Pre-instalar librpm-dev (no existe en Ubuntu). |
+| **Fecha** | 2026-08-01 |
+| **Responsable** | dnf-for-termux |
+
+*Actualizado: 1 agosto 2026*
 *Basado en investigación de termux-pacman (13 parches analizados), arquitectura de DNF5 (rpm-software-management/dnf5), y el build system de termux-packages (ghcr.io/termux/package-builder)*
