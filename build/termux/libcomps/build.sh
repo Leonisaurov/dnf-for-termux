@@ -48,6 +48,8 @@ cmake -S "$SOURCE_DIR/libcomps" -B "$BUILD_DIR" \
   -DENABLE_DEVELOPMENT=ON \
   -DENABLE_DOCS=OFF \
   -DENABLE_TESTS=OFF \
+  -DCMAKE_DISABLE_FIND_PACKAGE_PythonLibs=ON \
+  -DCMAKE_DISABLE_FIND_PACKAGE_PythonInterp=ON \
   2>&1
 
 # Build
@@ -58,4 +60,4 @@ DESTDIR="$STAGING_DIR" cmake --install "$BUILD_DIR" 2>&1
 
 echo "=== $COMPONENT build complete ==="
 echo "Build artifacts in: $STAGING_DIR"
-find "$STAGING_DIR" -type f 2>/dev/null | head -30
+find "$STAGING_DIR" -type f 2>/dev/null | head -30 || true

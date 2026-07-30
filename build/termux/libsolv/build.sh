@@ -69,4 +69,4 @@ DESTDIR="$STAGING_DIR" cmake --install "$BUILD_DIR" 2>&1
 
 echo "=== $COMPONENT build complete ==="
 echo "Build artifacts in: $STAGING_DIR"
-find "$STAGING_DIR" -type f 2>/dev/null | head -30
+find "$STAGING_DIR" -type f 2>/dev/null | head -30 || true

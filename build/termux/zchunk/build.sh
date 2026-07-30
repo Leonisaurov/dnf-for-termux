@@ -27,7 +27,7 @@ fi
 MESON=$(command -v meson 2>/dev/null || true)
 if [ -z "$MESON" ]; then
     echo "Downloading meson..."
-    pip install --user meson 2>&1 | tail -3
+    pip install --break-system-packages meson 2>&1 | tail -3
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
@@ -56,4 +56,4 @@ DESTDIR="$STAGING_DIR" meson install -C "$BUILD_DIR" 2>&1
 
 echo "=== $COMPONENT build complete ==="
 echo "Build artifacts in: $STAGING_DIR"
-find "$STAGING_DIR" -type f 2>/dev/null | head -30
+find "$STAGING_DIR" -type f 2>/dev/null | head -30 || true
