@@ -14,6 +14,13 @@ PROJECT_DIR="$SCRIPT_DIR/.."
 # Get RPM staging from environment (RPM_DIR) or fall back to default
 RPM_STAGING="${RPM_DIR:-$PROJECT_DIR/build/termux/rpm/staging/$PREFIX}"
 
+# Add RPM libraries to LDFLAGS for rpmdb2solv and other tools
+# librpm depends on librpmio; --as-needed may drop it without explicit -l
+if [ -d "$RPM_STAGING/lib" ]; then
+    export LDFLAGS="${LDFLAGS:-} -L$RPM_STAGING/lib -lrpmio"
+    echo "RPM LDFLAGS: -L$RPM_STAGING/lib -lrpmio"
+fi
+
 echo "=== Building $COMPONENT ==="
 echo "Source dir: $SOURCE_DIR"
 echo "Prefix: $PREFIX"
