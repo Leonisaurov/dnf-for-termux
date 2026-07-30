@@ -14,7 +14,7 @@
 
 ## Progreso Actual
 
-**Última actualización**: 30 julio 2026
+**Última actualización**: 31 julio 2026
 
 ### Fase 0 — Infraestructura: ✅ COMPLETADA (6 commits, 31 archivos)
 
@@ -44,14 +44,18 @@
 | build script template | ✅ Creado | TEMPLATE-build.sh para componentes |
 | CI-PIPELINE.md | ✅ Creado | Documentación del pipeline |
 
-### Fase 1 — Componentes Portables: 🔧 EN PROGRESO
+### Fase 1 — Componentes Portables: 🔧 3/4 COMPLETADO
 
 | Componente | Build Script | Compila en CI | Estado |
 |-----------|:-----------:|:-------------:|--------|
-| zchunk | ✅ Creado (meson) | ✅ Compila | Build verificado en CI |
-| libsolv | ✅ Creado (cmake) | ✅ Compila | Build verificado en CI |
-| libcomps | ✅ Creado (cmake) | 🔄 Pendiente de verificar | Fix aplicado, esperando CI |
-| librepo | ✅ Creado (cmake) | 🔄 Pendiente de verificar | Fix aplicado, esperando CI |
+| zchunk | ✅ Creado (meson) | ✅ Compila | Build verificado |
+| libsolv | ✅ Creado (cmake) | ✅ Compila | Build verificado |
+| libcomps | ✅ Creado (cmake) | ✅ Compila | Build verificado |
+| librepo | ✅ Creado (cmake) | ❌ Bloqueado por RPM | Depende de rpm/rpmpgp.h |
+
+**Nota**: librepo compila configuración cmake con el parche gpgme-opcional, pero 
+gpg_rpm.c incluye `<rpm/rpmpgp.h>` directamente en el código fuente. Para 
+completarlo se necesita primero RPM (ver Decisión #4).
 
 **Build scripts**: `build/termux/<componente>/build.sh`
 **CI Pipeline**: GitHub Actions con `ghcr.io/termux/package-builder:latest`
@@ -662,9 +666,9 @@ Ver `docs/CI-PIPELINE.md` para documentación completa.
 | zchunk | 🟢 GHA (10K C, fácil) | ✅ Build script creado, compila |
 | libcomps | 🟢 GHA (15K C, fácil) | ✅ Build script creado, compila |
 | libsolv | 🟢 GHA (80K C, portable) | ✅ Build script creado, compila |
-| librepo | 🟡 GHA (30K C, GLib) | ✅ Build script creado, compila |
-| dnf5 | 🔴 GHA (250K C++, pesado) | Excluido temporalmente |
-| RPM | 🔴 GHA (150K C, glibc) | Excluido temporalmente |
+| librepo | 🟡 GHA (30K C, GLib) | 🔶 Bloqueado: requiere rpm/rpmpgp.h |
+| dnf5 | 🔴 GHA (250K C++, pesado) | Pendiente de RPM |
+| RPM | 🟡 GHA (150K C, bionic) | Port existe en termux-packages |
 
 ### Beneficios de la CI/CD
 
@@ -712,5 +716,27 @@ Ver `docs/CI-PIPELINE.md` para documentación completa.
 | **Fecha** | 2026-07-30 |
 | **Responsable** | dnf-for-termux |
 
-*Actualizado: 30 julio 2026*
+### Decisión #4: RPM ya está portado a Termux
+
+| Campo | Valor |
+|-------|-------|
+| **Contexto** | Se asumía que RPM (~150K LOC C) nunca se había portado a bionic (Android libc), y que requeriría ~50 parches y resolver dependencias heavys como NSS. Esto hacía que el proyecto contemplara un Plan B (PRoot Fedora, adaptador RPM→apt, microdnf). |
+| **Hallazgo** | RPM 4.18.1 existe como paquete oficial de Termux desde Julio 2023 (`pkg install rpm`). Solo requirió **2 parches** mínimos: `errno.patch` (`__errno_location()` → `__errno()`) y `goto_declaration.patch`. RPM 4.18+ usa Sequoia PGP (Rust) o libgcrypt en vez de NSS, y SQLite en vez de Berkeley DB. |
+| **Decisión** | Portar RPM usando los parches de termux-packages como base. No se necesita Plan B. El port es factible y el esfuerzo es mucho menor al estimado originalmente. |
+| **Implicaciones** | Desbloquea librepo (que depende de `rpm/rpmpgp.h` para verificación de firmas) y toda la cadena libdnf5 → dnf5 CLI. |
+| **Fuente** | https://github.com/termux/termux-packages/tree/master/packages/rpm |
+| **Fecha** | 2026-07-31 |
+| **Responsable** | dnf-for-termux |
+
+### Decisión #5: Dependencias de dnf5 CLI (además de RPM)
+
+| Campo | Valor |
+|-------|-------|
+| **Contexto** | Para determinar el esfuerzo restante después de RPM, se investigaron las dependencias completas de libdnf5 y dnf5 CLI. |
+| **Hallazgo** | Además de RPM, libdnf5 requiere: libsolv, libsolvext, librepo, sqlite3, json-c, fmt, toml11, glib-2.0, libxml-2.0. De estas, la mayoría ya existen como paquetes en Termux. Las únicas que requieren port son libsolv/libsolvext (ya compiladas en Fase 1) y librepo (bloqueado por RPM). |
+| **Decisión** | No hay blockers severos adicionales. La cadena es larga pero todas las dependencias están disponibles en Termux o se compilan como parte del proyecto. El orden de implementación es: RPM → librepo → libdnf5 → dnf5 CLI. |
+| **Fecha** | 2026-07-31 |
+| **Responsable** | dnf-for-termux |
+
+*Actualizado: 31 julio 2026*
 *Basado en investigación de termux-pacman (13 parches analizados), arquitectura de DNF5 (rpm-software-management/dnf5), y el build system de termux-packages (ghcr.io/termux/package-builder)*
