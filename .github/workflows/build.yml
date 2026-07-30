@@ -313,11 +313,11 @@ jobs:
           key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
 
   # ==========================================================================
-  # BUILD: libsolv (depende de rpm para ENABLE_RPMDB)
+  # BUILD: libsolv (restaura RPM cache para ENABLE_RPMDB)
   # ==========================================================================
   build-libsolv:
     name: "📦 Build libsolv"
-    needs: [check-cache-libsolv, build-rpm]
+    needs: [check-cache-libsolv]
     if: needs.check-cache-libsolv.outputs.cache-hit != 'true'
     runs-on: ubuntu-latest
     container:
@@ -337,6 +337,13 @@ jobs:
               patch -p1 -d source/libsolv < "$patch" || true
             fi
           done
+
+      - name: Restore RPM cache (for ENABLE_RPMDB)
+        uses: actions/cache/restore@v4
+        with:
+          path: build/termux/rpm/staging/
+          key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
+          fail-on-cache-miss: false
 
       - name: Build libsolv
         shell: bash
