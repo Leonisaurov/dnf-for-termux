@@ -121,6 +121,50 @@ if [ -d "$RPM_LIB" ]; then
     export LDFLAGS="${LDFLAGS:-} -L$RPM_LIB"
 fi
 
+# Add include/library paths for libsolv
+LIBSOLV_INCLUDE="${LIBSOLV_INCLUDE_DIR:-$LIBSOLV_STAGING/include}"
+LIBSOLV_LIB="${LIBSOLV_LIB_DIR:-$LIBSOLV_STAGING/lib}"
+if [ -d "$LIBSOLV_INCLUDE" ]; then
+    export CFLAGS="${CFLAGS:-} -I$LIBSOLV_INCLUDE"
+    export CXXFLAGS="${CXXFLAGS:-} -I$LIBSOLV_INCLUDE"
+fi
+if [ -d "$LIBSOLV_LIB" ]; then
+    export LDFLAGS="${LDFLAGS:-} -L$LIBSOLV_LIB"
+fi
+
+# Add include/library paths for librepo
+LIBREPO_INCLUDE="${LIBREPO_INCLUDE_DIR:-$LIBREPO_STAGING/include}"
+LIBREPO_LIB="${LIBREPO_LIB_DIR:-$LIBREPO_STAGING/lib}"
+if [ -d "$LIBREPO_INCLUDE" ]; then
+    export CFLAGS="${CFLAGS:-} -I$LIBREPO_INCLUDE"
+    export CXXFLAGS="${CXXFLAGS:-} -I$LIBREPO_INCLUDE"
+fi
+if [ -d "$LIBREPO_LIB" ]; then
+    export LDFLAGS="${LDFLAGS:-} -L$LIBREPO_LIB"
+fi
+
+# Add include/library paths for libcomps
+LIBCOMPS_INCLUDE="${LIBCOMPS_INCLUDE_DIR:-$LIBCOMPS_STAGING/include}"
+LIBCOMPS_LIB="${LIBCOMPS_LIB_DIR:-$LIBCOMPS_STAGING/lib}"
+if [ -d "$LIBCOMPS_INCLUDE" ]; then
+    export CFLAGS="${CFLAGS:-} -I$LIBCOMPS_INCLUDE"
+    export CXXFLAGS="${CXXFLAGS:-} -I$LIBCOMPS_INCLUDE"
+fi
+if [ -d "$LIBCOMPS_LIB" ]; then
+    export LDFLAGS="${LDFLAGS:-} -L$LIBCOMPS_LIB"
+fi
+
+# Add include/library paths for zchunk
+ZCHUNK_INCLUDE="${ZCHUNK_INCLUDE_DIR:-$ZCHUNK_STAGING/include}"
+ZCHUNK_LIB="${ZCHUNK_LIB_DIR:-$ZCHUNK_STAGING/lib}"
+if [ -d "$ZCHUNK_INCLUDE" ]; then
+    export CFLAGS="${CFLAGS:-} -I$ZCHUNK_INCLUDE"
+    export CXXFLAGS="${CXXFLAGS:-} -I$ZCHUNK_INCLUDE"
+fi
+if [ -d "$ZCHUNK_LIB" ]; then
+    export LDFLAGS="${LDFLAGS:-} -L$ZCHUNK_LIB"
+fi
+
 # Build CMAKE_PREFIX_PATH from staging dirs (semicolon-separated for cmake)
 CMAKE_PREFIX_LIST=""
 for d in "$RPM_STAGING" "$LIBSOLV_STAGING" "$LIBREPO_STAGING" "$LIBCOMPS_STAGING" "$ZCHUNK_STAGING"; do
