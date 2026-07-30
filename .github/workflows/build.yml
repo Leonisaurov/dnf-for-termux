@@ -182,8 +182,8 @@ jobs:
             fi
           done
           
-          # Convert to JSON array for output
-          echo "needs-build=$(printf '%s\n' "${NEEDS_BUILD[@]}" | jq -R . | jq -s .)" >> $GITHUB_OUTPUT
+          # Convert to JSON array for output (compact single-line para GITHUB_OUTPUT)
+          echo "needs-build=$(printf '%s\n' "${NEEDS_BUILD[@]}" | jq -R . | jq -s -c .)" >> $GITHUB_OUTPUT
           
           if [ "$ALL_CACHED" = "true" ]; then
             echo "🎉 All components cached! No build needed."
