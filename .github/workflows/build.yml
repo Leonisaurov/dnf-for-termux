@@ -1,0 +1,220 @@
+# ============================================================================
+# dnf-for-termux: CI/CD Pipeline
+# ============================================================================
+# Compila todo el stack de DNF para Termux usando cross-compilation.
+# Corre en GitHub Actions (NO localmente - evitamos OOM killer).
+#
+# Cadena de dependencias:
+#   zchunk → libcomps → libsolv → librepo → dnf5 → RPM
+#
+# Infraestructura:
+#   - Container: ghcr.io/termux/termux-packages:latest
+#   - Target: aarch64 (ARM64)
+#   - Caching: S3/artifacts entre jobs
+#   - Release: GitHub Releases + GitHub Pages (repo RPM)
+# ============================================================================
+
+name: build
+
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      component:
+        description: "Component to build (all, zchunk, libcomps, libsolv, librepo, dnf5, rpm)"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - zchunk
+          - libcomps
+          - libsolv
+          - librepo
+          - dnf5
+          - rpm
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERMUX_PREFIX: /data/data/com.termux/files/usr
+  TARGET_ARCH: aarch64
+  CACHE_BUCKET: dnf-termux-cache
+
+jobs:
+  # --------------------------------------------------------------------------
+  # VALIDATION: Check patches and structure
+  # --------------------------------------------------------------------------
+  validate:
+    name: "🔍 Validate"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Check patches apply cleanly
+        run: |
+          for component in dnf5 libsolv librepo; do
+            PATCH_DIR="patches/$component"
+            SRC_DIR="source/$component"
+            if [ -d "$PATCH_DIR" ]; then
+              for patch in "$PATCH_DIR"/*.patch; do
+                if [ -s "$patch" ]; then
+                  echo "Checking: $patch"
+                  if ! patch --dry-run -p1 -d "$SRC_DIR" < "$patch" 2>/dev/null; then
+                    echo "❌ Patch failed: $patch"
+                    patch --dry-run -p0 -d "$SRC_DIR" < "$patch" 2>/dev/null || true
+                    exit 1
+                  fi
+                  echo "  ✅ OK"
+                fi
+              done
+            fi
+          done
+          echo "✅ All patches verified"
+
+      - name: Check submodules initialized
+        run: |
+          git submodule status
+          if git submodule status | grep -q "^-"; then
+            echo "❌ Some submodules not initialized"
+            exit 1
+          fi
+          echo "✅ All submodules initialized"
+
+  # --------------------------------------------------------------------------
+  # BUILD COMPONENT: Reusable build step
+  # --------------------------------------------------------------------------
+  build-component:
+    name: "📦 Build ${{ matrix.component }}"
+    needs: [validate]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/termux/termux-packages:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - zchunk
+          - libcomps
+          - libsolv
+          - librepo
+          - dnf5
+          - rpm
+        # Exclude components with no build.sh yet
+        exclude:
+          - component: dnf5
+          - component: rpm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: |
+            /home/builder/.termux-build/${{ matrix.component }}/output/
+            /home/builder/.termux-build/${{ matrix.component }}/build/
+          key: termux-${{ matrix.component }}-${{ hashFiles(format('build/termux/{0}/build.sh', matrix.component), format('patches/{0}/*.patch', matrix.component)) }}
+          restore-keys: |
+            termux-${{ matrix.component }}-
+
+      - name: Build ${{ matrix.component }}
+        run: |
+          # Apply patches
+          for patch in patches/${{ matrix.component }}/*.patch; do
+            if [ -s "$patch" ]; then
+              echo "Applying: $patch"
+              patch -p1 -d "source/${{ matrix.component }}" < "$patch" || true
+            fi
+          done
+
+          # If we have a build script, use it
+          if [ -f "build/termux/${{ matrix.component }}/build.sh" ]; then
+            echo "Using custom build.sh"
+            chmod +x "build/termux/${{ matrix.component }}/build.sh"
+            TERMUX_PREFIX=$TERMUX_PREFIX \
+            TARGET_ARCH=$TARGET_ARCH \
+            ./build/termux/${{ matrix.component }}/build.sh
+          else
+            echo "⚠️  No build.sh yet for ${{ matrix.component }}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.component }}-${{ github.sha }}
+          path: /home/builder/.termux-build/${{ matrix.component }}/output/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # --------------------------------------------------------------------------
+  # REPOSITORY: Generate RPM repository metadata
+  # --------------------------------------------------------------------------
+  create-repo:
+    name: "📚 Create RPM Repository"
+    needs: [build-component]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/artifacts
+          merge-multiple: true
+
+      - name: Create RPM repository
+        run: |
+          mkdir -p /tmp/repo
+          find /tmp/artifacts -name "*.rpm" -exec cp {} /tmp/repo/ \;
+          
+          # Install createrepo_c
+          sudo apt-get update && sudo apt-get install -y createrepo_c
+          
+          # Generate repo metadata
+          createrepo_c /tmp/repo
+          
+          echo "Repository created with $(ls /tmp/repo/*.rpm 2>/dev/null | wc -l) packages"
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: /tmp/repo
+          destination_dir: rpm
+
+  # --------------------------------------------------------------------------
+  # RELEASE: Create GitHub Release
+  # --------------------------------------------------------------------------
+  release:
+    name: "🏷️ Release"
+    needs: [build-component]
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/release-artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/release-artifacts/**/*
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') }}
+          fail_on_unmatched_files: false
