@@ -28,11 +28,15 @@ termux_step_post_get_source() {
 # CMakeLists.txt vive en libcomps/ (subdir del source), no en la raíz
 termux_step_configure() {
 	TERMUX_PKG_SRCDIR="$TERMUX_PKG_SRCDIR/libcomps"
-	# Replica scripts/build/configure/termux_step_configure.sh:16-18 del
-	# framework: el flujo NORMAL llama termux_setup_ninja antes de
-	# termux_step_configure_cmake cuando el generador es Ninja. Este step custom
-	# lo saltaba; garantizarlo aquí evita la muerte en
-	# MAKE_PROGRAM_PATH=$(command -v ninja) si se vuelve al generador Ninja.
+	# Replica el flujo NORMAL del framework
+	# (scripts/build/configure/termux_step_configure.sh): termux_setup_cmake
+	# garantiza el binario cmake en PATH y termux_setup_ninja garantiza ninja
+	# antes de termux_step_configure_cmake. Este step custom los saltaba; sin
+	# termux_setup_cmake el binario cmake no entra al PATH -> "cmake: command
+	# not found" en termux_step_configure_cmake.sh, y sin termux_setup_ninja se
+	# muere en MAKE_PROGRAM_PATH=$(command -v ninja) bajo set -e si se vuelve al
+	# generador Ninja.
+	termux_setup_cmake
 	termux_setup_ninja
 	termux_step_configure_cmake
 }
