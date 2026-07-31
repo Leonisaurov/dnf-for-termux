@@ -41,18 +41,18 @@ jobs:
 
       - name: Materialize termux-packages tree
         run: |
-          git clone --depth 1 https://github.com/termux/termux-packages.git $HOME/termux-packages
-          cp -r packages/* $HOME/termux-packages/packages/
+          git clone --depth 1 https://github.com/termux/termux-packages.git $GITHUB_WORKSPACE/termux-packages
+          cp -r packages/* $GITHUB_WORKSPACE/termux-packages/packages/
 
       - name: Build ${{ matrix.pkg }} (aarch64)
-        working-directory: $HOME/termux-packages
+        working-directory: $GITHUB_WORKSPACE/termux-packages
         run: |
           ./build-package.sh -a aarch64 -i ${{ matrix.pkg }}
 
       - name: Verify AArch64 architecture
         run: |
           set -e
-          DEB=$(find $HOME/.termux-build -path '*/${{ matrix.pkg }}*.deb' 2>/dev/null | head -1)
+          DEB=$(find / -name '*.deb' -path '*/.termux-build/*' 2>/dev/null | head -1)
           if [ -z "$DEB" ]; then echo "❌ No .deb found"; exit 1; fi
           echo "DEB: $DEB"
           mkdir -p /tmp/extract && dpkg-deb -x "$DEB" /tmp/extract
@@ -69,9 +69,21 @@ jobs:
           done < <(find /tmp/extract -type f \( -name '*.so*' -o -perm -111 \) 2>/dev/null)
           exit $NON_ARCH
 
+      - name: Stage .deb artifact
+        run: |
+          set -e
+          mkdir -p /tmp/artifacts
+          DEB=$(find / -name '*.deb' -path '*/.termux-build/*' 2>/dev/null | head -1)
+          if [ -z "$DEB" ]; then
+            echo "❌ No .deb found to stage — build did not produce an artifact"
+            exit 1
+          fi
+          echo "Staging: $DEB"
+          cp "$DEB" /tmp/artifacts/
+
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.pkg }}-aarch64
-          path: $HOME/.termux-build/*/*.deb
+          path: /tmp/artifacts/
           if-no-files-found: error
