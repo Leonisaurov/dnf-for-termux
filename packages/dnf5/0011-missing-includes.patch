@@ -1,0 +1,208 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Fri, 31 Jul 2026 00:00:00 -0600
+Subject: [PATCH 1/1] Add missing <sstream>/<fstream> includes
+
+libc++ from NDK r29 no longer drags <sstream>/<fstream> in
+transitively. Add the direct include to every file that uses
+std::ostringstream/std::istringstream/std::stringstream or
+std::ifstream/std::ofstream without including the header.
+
+diff --git a/dnf5/commands/versionlock/utils.cpp b/dnf5/commands/versionlock/utils.cpp
+--- a/dnf5/commands/versionlock/utils.cpp
++++ b/dnf5/commands/versionlock/utils.cpp
+@@ -24,6 +24,7 @@
+ 
+ #include <chrono>
+ #include <iomanip>
++#include <sstream>
+ 
+ std::string format_comment(std::string_view cmd) {
+     // format the comment for new config file entries
+diff --git a/dnf5-plugins/automatic_plugin/email_message.cpp b/dnf5-plugins/automatic_plugin/email_message.cpp
+--- a/dnf5-plugins/automatic_plugin/email_message.cpp
++++ b/dnf5-plugins/automatic_plugin/email_message.cpp
+@@ -23,6 +23,7 @@
+ #include <libdnf5/utils/format.hpp>
+ 
+ #include <chrono>
++#include <sstream>
+ #include <string>
+ 
+ namespace dnf5 {
+diff --git a/dnf5-plugins/automatic_plugin/emitters.cpp b/dnf5-plugins/automatic_plugin/emitters.cpp
+--- a/dnf5-plugins/automatic_plugin/emitters.cpp
++++ b/dnf5-plugins/automatic_plugin/emitters.cpp
+@@ -30,6 +30,7 @@
+ #include <fstream>
+ #include <iomanip>
+ #include <iostream>
++#include <sstream>
+ 
+ namespace dnf5 {
+ 
+diff --git a/dnf5-plugins/copr_plugin/copr.cpp b/dnf5-plugins/copr_plugin/copr.cpp
+--- a/dnf5-plugins/copr_plugin/copr.cpp
++++ b/dnf5-plugins/copr_plugin/copr.cpp
+@@ -20,6 +20,7 @@
+ #include "copr.hpp"
+ 
+ #include <regex>
++#include <sstream>
+ 
+ namespace dnf5 {
+ 
+diff --git a/dnf5-plugins/copr_plugin/copr_repo.cpp b/dnf5-plugins/copr_plugin/copr_repo.cpp
+--- a/dnf5-plugins/copr_plugin/copr_repo.cpp
++++ b/dnf5-plugins/copr_plugin/copr_repo.cpp
+@@ -30,6 +30,7 @@
+ 
+ #include <filesystem>
+ #include <fstream>
++#include <sstream>
+ #include <string>
+ 
+ 
+diff --git a/dnf5-plugins/copr_plugin/json.cpp b/dnf5-plugins/copr_plugin/json.cpp
+--- a/dnf5-plugins/copr_plugin/json.cpp
++++ b/dnf5-plugins/copr_plugin/json.cpp
+@@ -25,6 +25,7 @@
+ 
+ #include <fstream>
+ #include <iostream>
++#include <sstream>
+ #include <utility>
+ 
+ Json::Json(libdnf5::Base & base, const std::string & url) {
+diff --git a/libdnf5/conf/config_utils.cpp b/libdnf5/conf/config_utils.cpp
+--- a/libdnf5/conf/config_utils.cpp
++++ b/libdnf5/conf/config_utils.cpp
+@@ -22,6 +22,7 @@
+ #include "libdnf5/utils/fs/file.hpp"
+ 
+ #include <glob.h>
++#include <sstream>
+ 
+ 
+ namespace libdnf5 {
+diff --git a/libdnf5/rpm/nevra.cpp b/libdnf5/rpm/nevra.cpp
+--- a/libdnf5/rpm/nevra.cpp
++++ b/libdnf5/rpm/nevra.cpp
+@@ -23,6 +23,7 @@
+ #include "libdnf5/utils/bgettext/bgettext-mark-domain.h"
+ 
+ #include <rpm/rpmver.h>
++#include <sstream>
+ 
+ 
+ namespace libdnf5::rpm {
+diff --git a/libdnf5/rpm/transaction.cpp b/libdnf5/rpm/transaction.cpp
+--- a/libdnf5/rpm/transaction.cpp
++++ b/libdnf5/rpm/transaction.cpp
+@@ -41,6 +41,7 @@
+ 
+ #include <algorithm>
+ #include <map>
++#include <sstream>
+ 
+ 
+ namespace libdnf5::rpm {
+diff --git a/libdnf5/transaction/offline.cpp b/libdnf5/transaction/offline.cpp
+--- a/libdnf5/transaction/offline.cpp
++++ b/libdnf5/transaction/offline.cpp
+@@ -24,6 +24,8 @@
+ #include <libdnf5/utils/fs/file.hpp>
+ #include <toml.hpp>
+ 
++#include <fstream>
++
+ 
+ const int STATE_VERSION = 1;
+ const std::string STATE_HEADER{"offline-transaction-state"};
+diff --git a/libdnf5-cli/output/pkg_colorizer.cpp b/libdnf5-cli/output/pkg_colorizer.cpp
+--- a/libdnf5-cli/output/pkg_colorizer.cpp
++++ b/libdnf5-cli/output/pkg_colorizer.cpp
+@@ -25,6 +25,7 @@
+ 
+ #include <cctype>
+ #include <map>
++#include <sstream>
+ #include <string_view>
+ 
+ namespace libdnf5::cli::output {
+diff --git a/libdnf5-cli/output/search.cpp b/libdnf5-cli/output/search.cpp
+--- a/libdnf5-cli/output/search.cpp
++++ b/libdnf5-cli/output/search.cpp
+@@ -29,6 +29,7 @@
+ #include <iostream>
+ #include <numeric>
+ #include <regex>
++#include <sstream>
+ 
+ namespace libdnf5::cli::output {
+ 
+diff --git a/libdnf5-cli/progressbar/multi_progress_bar.cpp b/libdnf5-cli/progressbar/multi_progress_bar.cpp
+--- a/libdnf5-cli/progressbar/multi_progress_bar.cpp
++++ b/libdnf5-cli/progressbar/multi_progress_bar.cpp
+@@ -28,6 +28,7 @@
+ 
+ #include <algorithm>
+ #include <iomanip>
++#include <sstream>
+ 
+ 
+ namespace libdnf5::cli::progressbar {
+diff --git a/libdnf5-cli/progressbar/widgets/description.cpp b/libdnf5-cli/progressbar/widgets/description.cpp
+--- a/libdnf5-cli/progressbar/widgets/description.cpp
++++ b/libdnf5-cli/progressbar/widgets/description.cpp
+@@ -25,6 +25,7 @@
+ #include "libdnf5-cli/progressbar/progress_bar.hpp"
+ 
+ #include <iomanip>
++#include <sstream>
+ 
+ 
+ namespace libdnf5::cli::progressbar {
+diff --git a/libdnf5-cli/progressbar/widgets/progress.cpp b/libdnf5-cli/progressbar/widgets/progress.cpp
+--- a/libdnf5-cli/progressbar/widgets/progress.cpp
++++ b/libdnf5-cli/progressbar/widgets/progress.cpp
+@@ -24,6 +24,7 @@
+ 
+ #include <cmath>
+ #include <iomanip>
++#include <sstream>
+ #include <string>
+ 
+ 
+diff --git a/test/dnf5-plugins/copr_plugin/CoprRepoTest.cpp b/test/dnf5-plugins/copr_plugin/CoprRepoTest.cpp
+--- a/test/dnf5-plugins/copr_plugin/CoprRepoTest.cpp
++++ b/test/dnf5-plugins/copr_plugin/CoprRepoTest.cpp
+@@ -25,6 +25,7 @@
+ #include <libdnf5/base/base.hpp>
+ 
+ #include <filesystem>
++#include <fstream>
+ #include <regex>
+ #include <sstream>
+ 
+diff --git a/test/libdnf5-cli/test_progressbar.cpp b/test/libdnf5-cli/test_progressbar.cpp
+--- a/test/libdnf5-cli/test_progressbar.cpp
++++ b/test/libdnf5-cli/test_progressbar.cpp
+@@ -27,6 +27,7 @@
+ 
+ #include <clocale>
+ #include <cstring>
++#include <sstream>
+ 
+ 
+ CPPUNIT_TEST_SUITE_REGISTRATION(ProgressbarTest);
+diff --git a/test/libdnf5-cli/test_progressbar_interactive.cpp b/test/libdnf5-cli/test_progressbar_interactive.cpp
+--- a/test/libdnf5-cli/test_progressbar_interactive.cpp
++++ b/test/libdnf5-cli/test_progressbar_interactive.cpp
+@@ -28,6 +28,7 @@
+ #include <libdnf5-cli/progressbar/multi_progress_bar.hpp>
+ 
+ #include <regex>
++#include <sstream>
+ 
+ 
+ CPPUNIT_TEST_SUITE_REGISTRATION(ProgressbarInteractiveTest);
