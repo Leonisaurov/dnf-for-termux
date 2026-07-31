@@ -206,7 +206,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /dev/null
-          key: termux-libsolv-v3-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
+          key: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
           lookup-only: true
 
   # ==========================================================================
@@ -251,7 +251,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/android-ndk
-          key: android-ndk-r27-x86_64-linux-v2
+          key: android-ndk-r27-x86_64-linux-v3
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -307,7 +307,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/android-ndk
-          key: android-ndk-r27-x86_64-linux-v2
+          key: android-ndk-r27-x86_64-linux-v3
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -363,7 +363,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/android-ndk
-          key: android-ndk-r27-x86_64-linux-v2
+          key: android-ndk-r27-x86_64-linux-v3
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -404,7 +404,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/termux/libsolv/staging/
-          key: termux-libsolv-v3-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
+          key: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
 
   # ==========================================================================
   # BUILD: rpm (independiente)
@@ -427,7 +427,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/android-ndk
-          key: android-ndk-r27-x86_64-linux-v2
+          key: android-ndk-r27-x86_64-linux-v3
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -501,7 +501,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /dev/null
-          key: termux-dnf5-v4-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+          key: termux-dnf5-v5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
           lookup-only: true
 
   # ==========================================================================
@@ -525,7 +525,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/android-ndk
-          key: android-ndk-r27-x86_64-linux-v2
+          key: android-ndk-r27-x86_64-linux-v3
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -595,7 +595,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/android-ndk
-          key: android-ndk-r27-x86_64-linux-v2
+          key: android-ndk-r27-x86_64-linux-v3
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -621,7 +621,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build/termux/libsolv/staging/
-          key: termux-libsolv-v3-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
+          key: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
           fail-on-cache-miss: false
       - name: Restore rpm staging
         uses: actions/cache/restore@v4
@@ -691,7 +691,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/termux/dnf5/staging/
-          key: termux-dnf5-v4-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+          key: termux-dnf5-v5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
 
   # ==========================================================================
   # CREATE REPO: Generar metadatos del repositorio RPM (solo main)
