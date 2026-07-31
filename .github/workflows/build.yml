@@ -258,7 +258,7 @@ jobs:
       # === Android NDK for cross-compilation ===
       - name: Restore NDK cache
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/android-ndk
           key: android-ndk-r27-x86_64-linux-v3
@@ -291,7 +291,7 @@ jobs:
           ./build/termux/zchunk/build.sh
 
       - name: Cache zchunk
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/termux/zchunk/staging/
           key: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
@@ -314,7 +314,7 @@ jobs:
       # === Android NDK for cross-compilation ===
       - name: Restore NDK cache
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/android-ndk
           key: android-ndk-r27-x86_64-linux-v3
@@ -347,7 +347,7 @@ jobs:
           ./build/termux/libcomps/build.sh
 
       - name: Cache libcomps
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/termux/libcomps/staging/
           key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
@@ -370,7 +370,7 @@ jobs:
       # === Android NDK for cross-compilation ===
       - name: Restore NDK cache
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/android-ndk
           key: android-ndk-r27-x86_64-linux-v3
@@ -394,7 +394,7 @@ jobs:
           done
 
       - name: Restore RPM cache (for ENABLE_RPMDB)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/rpm/staging/
           key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
@@ -411,7 +411,7 @@ jobs:
           ./build/termux/libsolv/build.sh
 
       - name: Cache libsolv
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/termux/libsolv/staging/
           key: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
@@ -434,7 +434,7 @@ jobs:
       # === Android NDK for cross-compilation ===
       - name: Restore NDK cache
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/android-ndk
           key: android-ndk-r27-x86_64-linux-v3
@@ -467,7 +467,7 @@ jobs:
           ./build/termux/rpm/build.sh
 
       - name: Cache rpm
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/termux/rpm/staging/
           key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
@@ -540,7 +540,7 @@ jobs:
       # === Android NDK for cross-compilation ===
       - name: Restore NDK cache
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/android-ndk
           key: android-ndk-r27-x86_64-linux-v3
@@ -553,7 +553,7 @@ jobs:
           ./scripts/setup-ndk.sh
 
       - name: Restore rpm staging
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/rpm/staging/
           key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
@@ -587,7 +587,7 @@ jobs:
           ./build/termux/librepo/build.sh
 
       - name: Cache librepo
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/termux/librepo/staging/
           key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
@@ -610,7 +610,7 @@ jobs:
       # === Android NDK for cross-compilation ===
       - name: Restore NDK cache
         id: cache-ndk
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/android-ndk
           key: android-ndk-r27-x86_64-linux-v3
@@ -624,31 +624,31 @@ jobs:
 
       # Restaurar TODAS las dependencias desde cache
       - name: Restore zchunk staging
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/zchunk/staging/
           key: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
           fail-on-cache-miss: false
       - name: Restore libcomps staging
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/libcomps/staging/
           key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
           fail-on-cache-miss: false
       - name: Restore libsolv staging
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/libsolv/staging/
           key: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
           fail-on-cache-miss: false
       - name: Restore rpm staging
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/rpm/staging/
           key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
           fail-on-cache-miss: false
       - name: Restore librepo staging
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: build/termux/librepo/staging/
           key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
@@ -706,7 +706,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Cache dnf5
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: build/termux/dnf5/staging/
           key: termux-dnf5-v5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
