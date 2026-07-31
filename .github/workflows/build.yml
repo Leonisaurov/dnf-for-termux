@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [zchunk, libcomps, libsolv]
+        pkg: [zchunk, libcomps, libsolv, librepo]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -67,21 +67,24 @@ jobs:
       - name: Verify AArch64 architecture
         run: |
           set -e
-          DEB=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.deb' 2>/dev/null | head -1)
-          if [ -z "$DEB" ]; then echo "❌ No .deb found"; exit 1; fi
-          echo "DEB: $DEB"
-          mkdir -p /tmp/extract && dpkg-deb -x "$DEB" /tmp/extract
+          DEBS=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.deb' 2>/dev/null)
+          if [ -z "$DEBS" ]; then echo "❌ No .deb found"; exit 1; fi
           NON_ARCH=0
-          while IFS= read -r f; do
-            FT=$(file "$f")
-            echo "$FT"
-            case "$FT" in
-              *ELF*)
-                if ! echo "$FT" | grep -q 'aarch64\|ARM aarch64'; then
-                  echo "❌ NOT aarch64: $f"; NON_ARCH=1
-                fi ;;
-            esac
-          done < <(find /tmp/extract -type f \( -name '*.so*' -o -perm -111 \) 2>/dev/null)
+          for DEB in $DEBS; do
+            echo "Verificando: $DEB"
+            rm -rf /tmp/extract && mkdir -p /tmp/extract
+            dpkg-deb -x "$DEB" /tmp/extract
+            while IFS= read -r f; do
+              FT=$(file "$f")
+              echo "$FT"
+              case "$FT" in
+                *ELF*)
+                  if ! echo "$FT" | grep -q 'aarch64\|ARM aarch64'; then
+                    echo "❌ NOT aarch64: $f"; NON_ARCH=1
+                  fi ;;
+              esac
+            done < <(find /tmp/extract -type f \( -name '*.so*' -o -perm -111 \) 2>/dev/null)
+          done
           exit $NON_ARCH
 
       - name: Stage .deb artifact
