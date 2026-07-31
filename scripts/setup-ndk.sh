@@ -8,15 +8,24 @@ NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-lin
 TOOLCHAIN_DIR=""
 
 find_cross_compiler() {
-    # Search for the clang binary anywhere in the NDK (handles layout variations
-    # and symlinks - NDK clang bins are symlinks to clang)
-    local found
-    found=$(find "$NDK_DIR" -name "aarch64-linux-android-clang" 2>/dev/null | head -1)
-    if [ -n "$found" ] && [ -e "$found" ]; then
+    # 1) Prefer the standard NDK llvm prebuilt bin directory
+    local d found
+    for d in "$NDK_DIR"/toolchains/llvm/prebuilt/*/bin; do
+        [ -d "$d" ] || continue
+        if [ -x "$d/aarch64-linux-android-clang" ]; then
+            TOOLCHAIN_DIR="$d"
+            echo "✅ Cross-compiler found at: $TOOLCHAIN_DIR"
+            return 0
+        fi
+    done
+    # 2) Fallback: any executable clang inside a bin/ dir (excludes build/core dirs)
+    found=$(find "$NDK_DIR" -path "*/bin/aarch64-linux-android-clang" \( -type f -o -type l \) -exec test -x {} \; -print 2>/dev/null | head -1)
+    if [ -n "$found" ]; then
         TOOLCHAIN_DIR="$(dirname "$found")"
-        echo "✅ Cross-compiler found at: $TOOLCHAIN_DIR"
+        echo "✅ Cross-compiler found (fallback) at: $TOOLCHAIN_DIR"
         return 0
     fi
+    echo "❌ Cross-compiler NOT found"
     return 1
 }
 

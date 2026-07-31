@@ -155,11 +155,15 @@ jobs:
         with:
           submodules: "recursive"
       - id: check
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
-          lookup-only: true
+        shell: bash
+        env:
+          CACHE_KEY: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ==========================================================================
   # CHECK CACHE: libcomps (independiente)
@@ -176,11 +180,15 @@ jobs:
         with:
           submodules: "recursive"
       - id: check
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
-          lookup-only: true
+        shell: bash
+        env:
+          CACHE_KEY: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ==========================================================================
   # CHECK CACHE: libsolv (independiente)
@@ -197,11 +205,15 @@ jobs:
         with:
           submodules: "recursive"
       - id: check
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
-          lookup-only: true
+        shell: bash
+        env:
+          CACHE_KEY: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ==========================================================================
   # CHECK CACHE: rpm (independiente)
@@ -218,11 +230,15 @@ jobs:
         with:
           submodules: "recursive"
       - id: check
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
-          lookup-only: true
+        shell: bash
+        env:
+          CACHE_KEY: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ==========================================================================
   # BUILD: zchunk (independiente)
@@ -471,11 +487,15 @@ jobs:
         with:
           submodules: "recursive"
       - id: check
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
-          lookup-only: true
+        shell: bash
+        env:
+          CACHE_KEY: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ==========================================================================
   # CHECK CACHE: dnf5 (depende de TODOS — espera a que todos terminen)
@@ -492,11 +512,15 @@ jobs:
         with:
           submodules: "recursive"
       - id: check
-        uses: actions/cache@v4
-        with:
-          path: /dev/null
-          key: termux-dnf5-v5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
-          lookup-only: true
+        shell: bash
+        env:
+          CACHE_KEY: termux-dnf5-v5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
+        run: |
+          if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # ==========================================================================
   # BUILD: librepo (necesita rpm staging)
