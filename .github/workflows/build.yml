@@ -15,8 +15,6 @@ name: build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   validate:
@@ -41,12 +39,12 @@ jobs:
 
       - name: Materialize termux-packages tree
         run: |
-          git clone --depth 1 https://github.com/termux/termux-packages.git ${{ github.workspace }}/termux-packages
-          cp -r packages/* ${{ github.workspace }}/termux-packages/packages/
+          git clone --depth 1 https://github.com/termux/termux-packages.git $GITHUB_WORKSPACE/termux-packages
+          cp -r packages/* $GITHUB_WORKSPACE/termux-packages/packages/
 
       - name: Build ${{ matrix.pkg }} (aarch64)
-        working-directory: ${{ github.workspace }}/termux-packages
         run: |
+          cd "$GITHUB_WORKSPACE/termux-packages"
           ./build-package.sh -a aarch64 -i ${{ matrix.pkg }}
 
       - name: Verify AArch64 architecture
