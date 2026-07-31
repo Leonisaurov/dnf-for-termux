@@ -5,7 +5,7 @@ TERMUX_PKG_MAINTAINER="@termux"
 TERMUX_PKG_VERSION=5.4.2.1
 TERMUX_PKG_SRCURL=https://github.com/rpm-software-management/dnf5/archive/refs/tags/${TERMUX_PKG_VERSION}.tar.gz
 TERMUX_PKG_SHA256=6b3f23275a99c66c4b416d4d312f22da779e90f29c881be73eabfc459fca4fef
-TERMUX_PKG_DEPENDS="rpm, libsolv, librepo, libcomps, zchunk, libsqlite, json-c, fmt, glib, libxml2, zstd, liblzma, openssl, zlib, libsmartcols"
+TERMUX_PKG_DEPENDS="rpm, libsolv, librepo, libcomps, zchunk, libsqlite, json-c, fmt, glib, libxml2, zstd, liblzma, openssl, zlib, libsmartcols, libandroid-glob"
 TERMUX_PKG_BUILD_DEPENDS="libcurl"
 TERMUX_PKG_EXTRA_CONFIGURE_ARGS="
 -DWITH_DNF5DAEMON_SERVER=OFF
@@ -76,8 +76,15 @@ termux_step_post_get_source() {
 # En pre_configure todas las variables del framework ya estan definidas
 # (TERMUX_PKG_EXTRA_CONFIGURE_ARGS se evalua en termux_step_configure_cmake,
 # no al sourcear build.sh), asi que aqui se anade la ruta de toml11.
+# libandroid-glob provee glob()/globfree() (ausentes en bionic). El framework
+# cmake de termux-packages NO propaga $LDFLAGS a los targets cmake (solo a
+# -DCMAKE_LINKER), por eso ademas del LDFLAGS se pasan explicitos los flags
+# de enlazado para libs compartidas y ejecutables (libdnf5.so era el que
+# arrastraba los symbols undefined glob/globfree).
 termux_step_pre_configure() {
+	LDFLAGS+=" -landroid-glob"
 	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11"
+	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -DCMAKE_EXE_LINKER_FLAGS=-landroid-glob -DCMAKE_SHARED_LINKER_FLAGS=-landroid-glob"
 }
 
 # Los confiles se escriben en el MASSAGEDIR (el framework empaqueta desde
