@@ -84,7 +84,9 @@ termux_step_post_get_source() {
 termux_step_pre_configure() {
 	LDFLAGS+=" -landroid-glob"
 	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11"
-	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -DCMAKE_EXE_LINKER_FLAGS=-landroid-glob -DCMAKE_SHARED_LINKER_FLAGS=-landroid-glob"
+	# -landroid-glob rompe el try-compile de CMake (reemplaza los -L del framework).
+	# Enlazar por ruta absoluta del .so: no depende de -L y conserva las flags default.
+	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -DCMAKE_EXE_LINKER_FLAGS=${TERMUX_PREFIX}/lib/libandroid-glob.so -DCMAKE_SHARED_LINKER_FLAGS=${TERMUX_PREFIX}/lib/libandroid-glob.so"
 }
 
 # Los confiles se escriben en el MASSAGEDIR (el framework empaqueta desde
