@@ -250,8 +250,8 @@ jobs:
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: /opt/android-ndk
-          key: android-ndk-r27-x86_64-linux
+          path: /tmp/android-ndk
+          key: android-ndk-r27-x86_64-linux-v2
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -306,8 +306,8 @@ jobs:
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: /opt/android-ndk
-          key: android-ndk-r27-x86_64-linux
+          path: /tmp/android-ndk
+          key: android-ndk-r27-x86_64-linux-v2
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -362,8 +362,8 @@ jobs:
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: /opt/android-ndk
-          key: android-ndk-r27-x86_64-linux
+          path: /tmp/android-ndk
+          key: android-ndk-r27-x86_64-linux-v2
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -426,8 +426,8 @@ jobs:
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: /opt/android-ndk
-          key: android-ndk-r27-x86_64-linux
+          path: /tmp/android-ndk
+          key: android-ndk-r27-x86_64-linux-v2
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -524,8 +524,8 @@ jobs:
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: /opt/android-ndk
-          key: android-ndk-r27-x86_64-linux
+          path: /tmp/android-ndk
+          key: android-ndk-r27-x86_64-linux-v2
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'
@@ -594,8 +594,8 @@ jobs:
         id: cache-ndk
         uses: actions/cache@v4
         with:
-          path: /opt/android-ndk
-          key: android-ndk-r27-x86_64-linux
+          path: /tmp/android-ndk
+          key: android-ndk-r27-x86_64-linux-v2
 
       - name: Setup Android NDK
         if: steps.cache-ndk.outputs.cache-hit != 'true'

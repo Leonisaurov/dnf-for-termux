@@ -4,7 +4,7 @@
 set -euo pipefail
 
 NDK_VERSION="r27"
-NDK_DIR="/opt/android-ndk"
+NDK_DIR="/tmp/android-ndk"
 NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
 TOOLCHAIN_DIR="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
