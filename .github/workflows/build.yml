@@ -40,6 +40,24 @@ jobs:
           git clone --depth 1 https://github.com/termux/termux-packages.git "$GITHUB_WORKSPACE/termux-packages"
           cp -r packages/* "$GITHUB_WORKSPACE/termux-packages/packages/"
 
+          # Fix: make the c++/v1 header tweak in termux_setup_toolchain_29.sh non-fatal.
+          # Under set -e -o pipefail it can abort silently (grep no-match or sed -i
+          # copy-up failure on fuse-overlayfs read-only NDK headers) breaking libcomps.
+          python3 - <<'EOF'
+          import os, pathlib
+          p = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "termux-packages/scripts/build/toolchain/termux_setup_toolchain_29.sh"
+          s = p.read_text()
+          old = """grep -lrw $TERMUX_STANDALONE_TOOLCHAIN/sysroot/usr/include/c++/v1 -e 'include <version>' | xargs -n 1 sed -i 's/include <version>/include "version"/g'"""
+          new = old + ' || echo "WARN: c++/v1 version header tweak skipped (non-fatal)"'
+          if old in s:
+              p.write_text(s.replace(old, new))
+              print("OK: toolchain c++/v1 tweak made non-fatal")
+          else:
+              print("WARN: pattern not found, toolchain script may differ")
+          EOF
+          # Diagnóstico: confirmar la línea quedó no-fatal
+          grep -n "include <version>" "$GITHUB_WORKSPACE/termux-packages/scripts/build/toolchain/termux_setup_toolchain_29.sh" | head -5 || true
+
       - name: Build ${{ matrix.pkg }} (aarch64)
         working-directory: ${{ github.workspace }}/termux-packages
         run: |
