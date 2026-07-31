@@ -52,6 +52,7 @@ mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 # Configure with cmake
 cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -G "Ninja" \
+  -DCMAKE_TOOLCHAIN_FILE="$PROJECT_DIR/build/termux/aarch64-toolchain.cmake" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_INSTALL_LIBDIR="$PREFIX/lib" \

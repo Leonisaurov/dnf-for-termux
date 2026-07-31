@@ -187,6 +187,7 @@ sed -i 's/add_compile_options(-Wall -Wextra -Werror)/add_compile_options(-Wall -
 # Features incompatible with Termux/Android are explicitly disabled.
 cmake -S "$SOURCE_DIR" -B "$BUILD_DIR" \
   -G "Ninja" \
+  -DCMAKE_TOOLCHAIN_FILE="$PROJECT_DIR/build/termux/aarch64-toolchain.cmake" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_INSTALL_LIBDIR="$PREFIX/lib" \

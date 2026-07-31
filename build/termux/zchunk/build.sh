@@ -6,6 +6,7 @@ set -euo pipefail
 # === Configuration ===
 COMPONENT="zchunk"
 SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/../source/$COMPONENT"
 BUILD_DIR="$SCRIPT_DIR/../build/termux/$COMPONENT/build"
 STAGING_DIR="$SCRIPT_DIR/../build/termux/$COMPONENT/staging"
@@ -34,6 +35,12 @@ fi
 # Create build directory
 rm -rf "$BUILD_DIR" "$STAGING_DIR"
 mkdir -p "$BUILD_DIR" "$STAGING_DIR"
+
+# Export cross-compile toolchain for Meson (Android NDK)
+export CC=aarch64-linux-android-clang
+export CXX=aarch64-linux-android-clang++
+export AR=aarch64-linux-android-ar
+export STRIP=aarch64-linux-android-strip
 
 # Configure with meson
 cd "$SOURCE_DIR"
