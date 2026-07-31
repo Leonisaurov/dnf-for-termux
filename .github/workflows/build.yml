@@ -62,6 +62,13 @@ jobs:
       - name: Build ${{ matrix.pkg }} (aarch64)
         working-directory: ${{ github.workspace }}/termux-packages
         run: |
+          if [ "${{ matrix.pkg }}" = "dnf5" ]; then
+            # dnf5 requiere pool_parserpmrichdep.h + pool_parserpmrichdep() de libsolv,
+            # que solo se instalan con ENABLE_COMPLEX_DEPS=ON. Compilamos NUESTRO libsolv
+            # primero (queda instalado en el prefijo del container) para que dnf5 lo use
+            # en vez del oficial (sin el flag).
+            ./scripts/run-docker.sh -d ./build-package.sh -a aarch64 libsolv
+          fi
           ./scripts/run-docker.sh -d ./build-package.sh -I -C -a aarch64 "${{ matrix.pkg }}"
 
       - name: Verify AArch64 architecture
