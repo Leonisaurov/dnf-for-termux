@@ -5,10 +5,26 @@ set -euo pipefail
 NDK_VERSION="r27"
 NDK_DIR="/tmp/android-ndk"
 NDK_URL="https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
-TOOLCHAIN_DIR="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
+TOOLCHAIN_DIR=""
+
+find_cross_compiler() {
+    # Search for the clang binary anywhere in the NDK (handles layout variations
+    # and symlinks - NDK clang bins are symlinks to clang)
+    local found
+    found=$(find "$NDK_DIR" -name "aarch64-linux-android-clang" 2>/dev/null | head -1)
+    if [ -n "$found" ] && [ -e "$found" ]; then
+        TOOLCHAIN_DIR="$(dirname "$found")"
+        echo "✅ Cross-compiler found at: $TOOLCHAIN_DIR"
+        return 0
+    fi
+    return 1
+}
 
 export_ndk_vars() {
-    # Export toolchain variables with ABSOLUTE paths via GITHUB_ENV
+    if [ -z "$TOOLCHAIN_DIR" ]; then
+        echo "❌ TOOLCHAIN_DIR is empty, cannot export"
+        exit 1
+    fi
     {
         echo "NDK_TOOLCHAIN_BIN=$TOOLCHAIN_DIR"
         echo "CC=$TOOLCHAIN_DIR/aarch64-linux-android-clang"
@@ -24,28 +40,44 @@ export_ndk_vars() {
     fi
 }
 
-# Check if cross-compiler already available
+# Check if cross-compiler already in PATH
 if command -v aarch64-linux-android-clang &>/dev/null; then
     echo "✅ Cross-compiler aarch64-linux-android-clang found in PATH"
+    TOOLCHAIN_DIR="$(dirname "$(command -v aarch64-linux-android-clang)")"
     export_ndk_vars
     exit 0
 fi
 
-# Check if NDK already installed
-if [ -f "$TOOLCHAIN_DIR/aarch64-linux-android-clang" ]; then
+# Check if NDK already installed somewhere
+if [ -d "$NDK_DIR" ] && find_cross_compiler; then
     echo "✅ NDK found at $NDK_DIR"
     export_ndk_vars
     exit 0
 fi
 
-# Download and install NDK
+# Download and extract NDK
 echo "📥 Downloading Android NDK ${NDK_VERSION}..."
+mkdir -p /tmp
 curl -Lo /tmp/ndk.zip "$NDK_URL" 2>&1 | tail -5
 
 echo "📦 Extracting NDK..."
 unzip -q /tmp/ndk.zip -d /tmp/ndk-extract
+rm -rf "$NDK_DIR"
 mv /tmp/ndk-extract/android-ndk-${NDK_VERSION} "$NDK_DIR"
 rm -rf /tmp/ndk.zip /tmp/ndk-extract
 
-echo "✅ NDK installed at $NDK_DIR"
-export_ndk_vars
+# Verify the cross-compiler exists (with diagnostic output if not)
+if find_cross_compiler; then
+    echo "✅ NDK installed and verified"
+    export_ndk_vars
+    exit 0
+else
+    echo "❌ Cross-compiler NOT found after extraction!"
+    echo "--- NDK layout (first 3 levels): ---"
+    ls -la "$NDK_DIR" 2>/dev/null | head -30
+    echo "--- Searching for any clang: ---"
+    find "$NDK_DIR" -name "*clang*" 2>/dev/null | head -20
+    echo "--- Searching for aarch64 bin dirs: ---"
+    find "$NDK_DIR" -type d -name "bin" 2>/dev/null | head -20
+    exit 1
+fi
