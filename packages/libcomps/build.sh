@@ -8,6 +8,11 @@ TERMUX_PKG_SHA256=c24a81dea8e9f7f3c877618d3812a5293df772abc6b90fad1d34fa62326141
 TERMUX_PKG_DEPENDS="libxml2, zlib, libexpat"
 TERMUX_PKG_EXTRA_CONFIGURE_ARGS="-DENABLE_DOCS=OFF -DENABLE_TESTS=OFF -DENABLE_DEVELOPMENT=ON"
 
+# Generador Unix Makefiles: el flujo custom (termux_step_configure) no inicializa
+# ninja en el PATH; con Ninja el framework muere silenciosamente en
+# MAKE_PROGRAM_PATH=$(command -v ninja) bajo set -e.
+TERMUX_PKG_CMAKE_GENERATOR="Unix Makefiles"
+
 # El framework auto-aplica solo *.patch (termux_step_patch_package.sh usa
 # `find -name \*.patch | sed ... | patch --silent -p1`), con fallo silencioso.
 # El overlay .diff se aplica aquí explícitamente tras extraer el source.

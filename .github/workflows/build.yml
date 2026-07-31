@@ -62,21 +62,7 @@ jobs:
       - name: Build ${{ matrix.pkg }} (aarch64)
         working-directory: ${{ github.workspace }}/termux-packages
         run: |
-          if [ "${{ matrix.pkg }}" = "libcomps" ]; then
-            # DIAGNÓSTICO: bash -x para revelar el exit 1 silencioso tras el elf-cleaner.
-            # Sin -d (dry-run): el comando completo corre en el docker real y su salida
-            # se captura a /tmp/diag-libcomps.log. set +e/-e evita que el step aborte
-            # antes del tail (GH Actions corre bash con -e -o pipefail).
-            set +e
-            ./scripts/run-docker.sh bash -x ./build-package.sh -I -C -a aarch64 libcomps > /tmp/diag-libcomps.log 2>&1
-            rc=$?
-            set -e
-            echo "run-docker terminó (exit $rc)"
-          else
-            ./scripts/run-docker.sh -d ./build-package.sh -I -C -a aarch64 "${{ matrix.pkg }}"
-          fi
-          echo "===== DIAGNÓSTICO: ÚLTIMAS 120 LÍNEAS (libcomps) ====="
-          tail -120 /tmp/diag-libcomps.log 2>/dev/null || true
+          ./scripts/run-docker.sh -d ./build-package.sh -I -C -a aarch64 "${{ matrix.pkg }}"
 
       - name: Verify AArch64 architecture
         run: |
