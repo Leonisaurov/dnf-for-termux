@@ -4,12 +4,14 @@ Subject: [PATCH 2/6] Adapt config_main.cpp paths for Termux ($PREFIX)
 
 Replace FHS hardcoded paths in config_main.cpp with PREFIX_PATH
 wrappers so they resolve to Termux's $PREFIX at compile time.
-Changes logdir path and two glob paths for protected packages.
+Changes the logdir path and the protected-packages glob path.
+(Against 5.4.2.1 the usr_drift_protected_paths option was removed
+upstream, so its hunk was dropped.)
 
 diff --git a/libdnf5/conf/config_main.cpp b/libdnf5/conf/config_main.cpp
 --- a/libdnf5/conf/config_main.cpp
 +++ b/libdnf5/conf/config_main.cpp
-@@ -134,7 +134,7 @@
+@@ -133,7 +133,7 @@
      OptionPath system_cachedir{SYSTEM_CACHEDIR};
      OptionEnum cacheonly{"none", {"all", "metadata", "none"}};
      OptionBool keepcache{false};
@@ -18,16 +20,8 @@ diff --git a/libdnf5/conf/config_main.cpp b/libdnf5/conf/config_main.cpp
      OptionNumber<std::int32_t> log_size{1024 * 1024, str_to_bytes};
      OptionNumber<std::int32_t> log_rotate{4, 0};
      OptionPath debugdir{"./debugdata"};
-@@ -239,7 +239,7 @@
-     OptionEnum persistence{"auto", {"auto", "persist", "transient"}};
-
-     OptionStringAppendList usr_drift_protected_paths{
--        std::vector<std::string>{"glob:/etc/dnf/usr-drift-protected-paths.d/*.conf"}};
-+        std::vector<std::string>{"glob:" PREFIX_PATH("/etc/dnf/usr-drift-protected-paths.d/*.conf")}};
-
-     // Repo main config
-
-@@ -256,7 +256,7 @@
+@@ -250,7 +250,7 @@
+     OptionString proxy{""};
      OptionString proxy_username{nullptr};
      OptionString proxy_password{nullptr};
      OptionStringSet proxy_auth_method{"any", "any|none|basic|digest|negotiate|ntlm|digest_ie|ntlm_wb", false};
@@ -35,4 +29,3 @@ diff --git a/libdnf5/conf/config_main.cpp b/libdnf5/conf/config_main.cpp
 +    OptionStringAppendList protected_packages{std::vector<std::string>{"dnf5", "glob:" PREFIX_PATH("/etc/dnf/protected.d/*.conf")}};
      OptionString username{""};
      OptionString password{""};
-     OptionEnum gpgcheck_policy{"legacy", {"legacy", "full", "all"}};
