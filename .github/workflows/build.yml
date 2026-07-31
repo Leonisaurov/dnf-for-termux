@@ -11,13 +11,7 @@
 name: build
 
 on:
-  push:
-    branches: [main, develop]
-    paths-ignore:
-      - "docs/**"
-      - "**.md"
-  pull_request:
-    branches: [main]
+  # Only manual dispatch - automatic triggers disabled to avoid cache interference
   workflow_dispatch:
     inputs:
       component:
