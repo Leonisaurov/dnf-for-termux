@@ -44,19 +44,20 @@ jobs:
           # Under set -e -o pipefail it can abort silently (grep no-match or sed -i
           # copy-up failure on fuse-overlayfs read-only NDK headers) breaking libcomps.
           python3 - <<'EOF'
-          import os, pathlib
+          import os, pathlib, re
           p = pathlib.Path(os.environ["GITHUB_WORKSPACE"]) / "termux-packages/scripts/build/toolchain/termux_setup_toolchain_29.sh"
           s = p.read_text()
-          old = """grep -lrw $TERMUX_STANDALONE_TOOLCHAIN/sysroot/usr/include/c++/v1 -e 'include <version>' | xargs -n 1 sed -i 's/include <version>/include "version"/g'"""
-          new = old + ' || echo "WARN: c++/v1 version header tweak skipped (non-fatal)"'
-          if old in s:
-              p.write_text(s.replace(old, new))
+          # Regex robusta: hace no-fatal la pipeline del c++/v1 header tweak (grep|xargs sed -i),
+          # independientemente de los escapes (\") que tenga la línea real en master.
+          pat = re.compile(r"(grep -lrw \$TERMUX_STANDALONE_TOOLCHAIN/sysroot/usr/include/c\+\+/v1[^\n]*)", re.M)
+          if pat.search(s):
+              p.write_text(pat.sub(lambda m: m.group(1) + ' || true', s))
               print("OK: toolchain c++/v1 tweak made non-fatal")
           else:
-              print("WARN: pattern not found, toolchain script may differ")
+              print("WARN: c++/v1 tweak pattern not found, toolchain script may differ")
           EOF
-          # Diagnóstico: confirmar la línea quedó no-fatal
-          grep -n "include <version>" "$GITHUB_WORKSPACE/termux-packages/scripts/build/toolchain/termux_setup_toolchain_29.sh" | head -5 || true
+          # Diagnóstico: confirmar la línea quedó no-fatal (debe terminar en || true)
+          grep -n "c++/v1" "$GITHUB_WORKSPACE/termux-packages/scripts/build/toolchain/termux_setup_toolchain_29.sh" | head -3 || true
 
       - name: Build ${{ matrix.pkg }} (aarch64)
         working-directory: ${{ github.workspace }}/termux-packages
