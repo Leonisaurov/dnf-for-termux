@@ -41,11 +41,11 @@ jobs:
 
       - name: Materialize termux-packages tree
         run: |
-          git clone --depth 1 https://github.com/termux/termux-packages.git $GITHUB_WORKSPACE/termux-packages
-          cp -r packages/* $GITHUB_WORKSPACE/termux-packages/packages/
+          git clone --depth 1 https://github.com/termux/termux-packages.git ${{ github.workspace }}/termux-packages
+          cp -r packages/* ${{ github.workspace }}/termux-packages/packages/
 
       - name: Build ${{ matrix.pkg }} (aarch64)
-        working-directory: $GITHUB_WORKSPACE/termux-packages
+        working-directory: ${{ github.workspace }}/termux-packages
         run: |
           ./build-package.sh -a aarch64 -i ${{ matrix.pkg }}
 
