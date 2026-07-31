@@ -245,6 +245,21 @@ jobs:
         with:
           submodules: "recursive"
 
+      # === Android NDK for cross-compilation ===
+      - name: Restore NDK cache
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-r27-x86_64-linux
+
+      - name: Setup Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/setup-ndk.sh
+          ./scripts/setup-ndk.sh
+
       - name: Apply patches
         shell: bash
         run: |
@@ -286,6 +301,21 @@ jobs:
         with:
           submodules: "recursive"
 
+      # === Android NDK for cross-compilation ===
+      - name: Restore NDK cache
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-r27-x86_64-linux
+
+      - name: Setup Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/setup-ndk.sh
+          ./scripts/setup-ndk.sh
+
       - name: Apply patches
         shell: bash
         run: |
@@ -326,6 +356,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
+
+      # === Android NDK for cross-compilation ===
+      - name: Restore NDK cache
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-r27-x86_64-linux
+
+      - name: Setup Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/setup-ndk.sh
+          ./scripts/setup-ndk.sh
 
       - name: Apply patches
         shell: bash
@@ -375,6 +420,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
+
+      # === Android NDK for cross-compilation ===
+      - name: Restore NDK cache
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-r27-x86_64-linux
+
+      - name: Setup Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/setup-ndk.sh
+          ./scripts/setup-ndk.sh
 
       - name: Apply patches
         shell: bash
@@ -459,6 +519,21 @@ jobs:
         with:
           submodules: "recursive"
 
+      # === Android NDK for cross-compilation ===
+      - name: Restore NDK cache
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-r27-x86_64-linux
+
+      - name: Setup Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/setup-ndk.sh
+          ./scripts/setup-ndk.sh
+
       - name: Restore rpm staging
         uses: actions/cache/restore@v4
         with:
@@ -513,6 +588,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: "recursive"
+
+      # === Android NDK for cross-compilation ===
+      - name: Restore NDK cache
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /opt/android-ndk
+          key: android-ndk-r27-x86_64-linux
+
+      - name: Setup Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          chmod +x scripts/setup-ndk.sh
+          ./scripts/setup-ndk.sh
 
       # Restaurar TODAS las dependencias desde cache
       - name: Restore zchunk staging
