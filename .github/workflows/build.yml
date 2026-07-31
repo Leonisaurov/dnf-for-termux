@@ -37,6 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Point toolchain to container NDK
+        run: |
+          mkdir -p "$HOME"
+          ln -sfn /home/builder/lib "$HOME/lib"
+          ls -la "$HOME/lib/" 2>/dev/null || true
+
       - name: Materialize termux-packages tree
         run: |
           git clone --depth 1 https://github.com/termux/termux-packages.git $GITHUB_WORKSPACE/termux-packages
