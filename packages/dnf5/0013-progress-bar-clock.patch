@@ -1,0 +1,109 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Fri, 31 Jul 2026 00:00:00 -0600
+Subject: [PATCH 1/1] Unify progress bar clocks to steady_clock
+
+ProgressBar::update() sampled the clock with
+std::chrono::high_resolution_clock::now() while the Impl members
+begin/end/current_speed_window_start and the public get_begin() API
+used std::chrono::system_clock. Mixing the two time_point types fails
+to compile (deduced conflicting types for parameter '_Clock').
+
+The progress bar only measures durations (elapsed time, current and
+average speed, remaining time) and never displays an absolute wall-clock
+timestamp, so steady_clock is the correct clock: it is monotonic and not
+affected by NTP adjustments or manual wall-clock changes (system_clock
+can step backwards, producing negative/incorrect deltas).
+
+Unify every timestamp to steady_clock:
+- progress_bar.hpp: get_begin() returns time_point<steady_clock>
+- progress_bar.cpp: Impl members, constructor defaults, reset(), start()
+  and update(); the "not started yet" sentinel begin == from_time_t(0)
+  becomes begin == steady_clock::time_point{} (steady_clock has no
+  from_time_t)
+- widgets/progress.cpp: the spinner uses system_clock::now() together
+  with get_begin(); switch it to steady_clock as well
+
+diff --git a/include/libdnf5-cli/progressbar/progress_bar.hpp b/include/libdnf5-cli/progressbar/progress_bar.hpp
+--- a/include/libdnf5-cli/progressbar/progress_bar.hpp
++++ b/include/libdnf5-cli/progressbar/progress_bar.hpp
+@@ -115,7 +115,7 @@
+     int64_t get_elapsed_seconds() const noexcept;
+     int64_t get_remaining_seconds() const noexcept;
+ 
+-    std::chrono::time_point<std::chrono::system_clock> get_begin();
++    std::chrono::time_point<std::chrono::steady_clock> get_begin();
+ 
+     LIBDNF_CLI_API friend std::ostream & operator<<(std::ostream & os, ProgressBar & bar);
+ 
+diff --git a/libdnf5-cli/progressbar/progress_bar.cpp b/libdnf5-cli/progressbar/progress_bar.cpp
+--- a/libdnf5-cli/progressbar/progress_bar.cpp
++++ b/libdnf5-cli/progressbar/progress_bar.cpp
+@@ -66,11 +66,11 @@
+ 
+     bool auto_finish = true;
+ 
+-    std::chrono::time_point<std::chrono::system_clock> begin = std::chrono::system_clock::from_time_t(0);
+-    std::chrono::time_point<std::chrono::system_clock> end = std::chrono::system_clock::from_time_t(0);
++    std::chrono::time_point<std::chrono::steady_clock> begin = std::chrono::steady_clock::time_point{};
++    std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::time_point{};
+ 
+     // current (average) speed over the last second
+-    std::chrono::time_point<std::chrono::system_clock> current_speed_window_start = std::chrono::system_clock::now();
++    std::chrono::time_point<std::chrono::steady_clock> current_speed_window_start = std::chrono::steady_clock::now();
+     int64_t current_speed = 0;
+     int64_t current_speed_window_ticks = 0;
+ };
+@@ -235,7 +235,7 @@
+     return p_impl->remaining_seconds;
+ }
+ 
+-std::chrono::time_point<std::chrono::system_clock> ProgressBar::get_begin() {
++std::chrono::time_point<std::chrono::steady_clock> ProgressBar::get_begin() {
+     return p_impl->begin;
+ }
+ 
+@@ -252,9 +252,9 @@
+     p_impl->remaining_seconds = 0;
+     p_impl->average_speed = 0;
+     p_impl->auto_finish = true;
+-    p_impl->begin = std::chrono::system_clock::from_time_t(0);
+-    p_impl->end = std::chrono::system_clock::from_time_t(0);
+-    p_impl->current_speed_window_start = std::chrono::system_clock::now();
++    p_impl->begin = std::chrono::steady_clock::time_point{};
++    p_impl->end = std::chrono::steady_clock::time_point{};
++    p_impl->current_speed_window_start = std::chrono::steady_clock::now();
+     p_impl->current_speed = 0;
+     p_impl->current_speed_window_ticks = 0;
+ }
+@@ -283,8 +283,8 @@
+ 
+ 
+ void ProgressBar::start() {
+-    if (p_impl->begin == std::chrono::system_clock::from_time_t(0)) {
+-        p_impl->begin = std::chrono::system_clock::now();
++    if (p_impl->begin == std::chrono::steady_clock::time_point{}) {
++        p_impl->begin = std::chrono::steady_clock::now();
+         p_impl->state = ProgressBarState::STARTED;
+     }
+ }
+@@ -308,7 +308,7 @@
+             static_cast<int32_t>(static_cast<float>(p_impl->ticks) / static_cast<float>(p_impl->total_ticks) * 100);
+     }
+ 
+-    auto now = std::chrono::high_resolution_clock::now();
++    auto now = std::chrono::steady_clock::now();
+ 
+     // compute the current speed (ticks per second)
+     auto delta = now - p_impl->current_speed_window_start;
+diff --git a/libdnf5-cli/progressbar/widgets/progress.cpp b/libdnf5-cli/progressbar/widgets/progress.cpp
+--- a/libdnf5-cli/progressbar/widgets/progress.cpp
++++ b/libdnf5-cli/progressbar/widgets/progress.cpp
+@@ -50,7 +50,7 @@
+             (static_cast<double>(width) - 2)));
+         os << std::left << std::setw(static_cast<int>(width - 2)) << std::string(progress, '=');
+     } else {
+-        auto now = std::chrono::system_clock::now();
++        auto now = std::chrono::steady_clock::now();
+         auto delta = now - get_bar()->get_begin();
+         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(delta).count();
+         progress = static_cast<std::size_t>(ms / 500) % (width - 4);
