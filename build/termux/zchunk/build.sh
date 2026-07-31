@@ -37,10 +37,10 @@ rm -rf "$BUILD_DIR" "$STAGING_DIR"
 mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
 # Export cross-compile toolchain for Meson (Android NDK, absolute paths)
-export CC="${NDK_TOOLCHAIN_BIN}/aarch64-linux-android-clang"
-export CXX="${NDK_TOOLCHAIN_BIN}/aarch64-linux-android-clang++"
-export AR="${NDK_TOOLCHAIN_BIN}/aarch64-linux-android-ar"
-export STRIP="${NDK_TOOLCHAIN_BIN}/aarch64-linux-android-strip"
+export CC="${NDK_CC:-${NDK_TOOLCHAIN_BIN}/aarch64-linux-android24-clang}"
+export CXX="${NDK_CXX:-${NDK_TOOLCHAIN_BIN}/aarch64-linux-android24-clang++}"
+export AR="${NDK_TOOLCHAIN_BIN}/llvm-ar"
+export STRIP="${NDK_TOOLCHAIN_BIN}/llvm-strip"
 
 # Configure with meson
 cd "$SOURCE_DIR"

@@ -157,6 +157,7 @@ jobs:
       - id: check
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CACHE_KEY: termux-zchunk-${{ hashFiles('build/termux/zchunk/build.sh', 'patches/zchunk/*.patch') }}
         run: |
           if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
@@ -182,6 +183,7 @@ jobs:
       - id: check
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CACHE_KEY: termux-libcomps-${{ hashFiles('build/termux/libcomps/build.sh', 'patches/libcomps/*.patch') }}
         run: |
           if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
@@ -207,6 +209,7 @@ jobs:
       - id: check
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CACHE_KEY: termux-libsolv-v4-${{ hashFiles('build/termux/libsolv/build.sh', 'patches/libsolv/*.patch') }}
         run: |
           if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
@@ -232,6 +235,7 @@ jobs:
       - id: check
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CACHE_KEY: termux-rpm-${{ hashFiles('build/termux/rpm/build.sh', 'patches/rpm/*.patch') }}
         run: |
           if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
@@ -489,6 +493,7 @@ jobs:
       - id: check
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CACHE_KEY: termux-librepo-${{ hashFiles('build/termux/librepo/build.sh', 'patches/librepo/*.patch') }}
         run: |
           if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
@@ -514,6 +519,7 @@ jobs:
       - id: check
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           CACHE_KEY: termux-dnf5-v5-${{ hashFiles('build/termux/dnf5/build.sh', 'patches/dnf5/*.patch') }}
         run: |
           if gh cache list --repo "$GITHUB_REPOSITORY" --limit 100 --json key --jq '.[].key' | grep -qx "$CACHE_KEY"; then
