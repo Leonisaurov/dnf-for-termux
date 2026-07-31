@@ -1,0 +1,42 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Wed, 29 Jul 2026 22:54:00 -0600
+Subject: [PATCH 6/6] Adapt automatic plugin paths for Termux ($PREFIX)
+
+Wrap configuration search paths and MOTD filename with PREFIX_PATH
+so they resolve under Termux's $PREFIX instead of FHS roots.
+
+diff --git a/dnf5-plugins/automatic_plugin/automatic.cpp b/dnf5-plugins/automatic_plugin/automatic.cpp
+--- a/dnf5-plugins/automatic_plugin/automatic.cpp
++++ b/dnf5-plugins/automatic_plugin/automatic.cpp
+@@ -298,7 +298,7 @@
+     bool use_host_config{main_config.get_use_host_config_option().get_value()};
+     std::filesystem::path installroot_path{main_config.get_installroot_option().get_value()};
+     std::vector<std::tuple<std::filesystem::path, bool>> possible_paths{
+-        {"/usr/share/dnf5/dnf5-plugins", false}, {"/etc/dnf/dnf5-plugins", true}, {"/etc/dnf", false}};
++        {PREFIX_PATH("/share/dnf5/dnf5-plugins"), false}, {PREFIX_PATH("/etc/dnf/dnf5-plugins"), true}, {PREFIX_PATH("/etc/dnf"), false}};
+     auto & logger = *base.get_logger();
+     for (const auto & [pth, deprecated] : possible_paths) {
+         std::filesystem::path conf_file_path{pth / "automatic.conf"};
+diff --git a/dnf5-plugins/automatic_plugin/emitters.cpp b/dnf5-plugins/automatic_plugin/emitters.cpp
+--- a/dnf5-plugins/automatic_plugin/emitters.cpp
++++ b/dnf5-plugins/automatic_plugin/emitters.cpp
+@@ -34,9 +34,18 @@
+ #include <iostream>
+ #include <map>
+
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX ""
++#endif
++#endif
++#define PREFIX_PATH(path) TERMUX_PREFIX path
++
+ namespace dnf5 {
+
+-constexpr const char * MOTD_FILENAME = "/etc/motd.d/dnf5-automatic";
++constexpr const char * MOTD_FILENAME = PREFIX_PATH("/etc/motd.d/dnf5-automatic");
+ enum class AutomaticStage { CHECK, DOWNLOAD, APPLY };
+
+ int Emitter::upgrades_count() {

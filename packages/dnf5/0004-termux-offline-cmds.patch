@@ -1,0 +1,20 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Wed, 29 Jul 2026 22:54:00 -0600
+Subject: [PATCH 4/6] Adapt offline command paths for Termux ($PREFIX)
+
+Change plymouth and journalctl paths from /usr/bin to $PREFIX/bin.
+Termux installs all binaries under $PREFIX/bin/ with no /usr prefix.
+
+diff --git a/dnf5/commands/offline/offline.hpp b/dnf5/commands/offline/offline.hpp
+--- a/dnf5/commands/offline/offline.hpp
++++ b/dnf5/commands/offline/offline.hpp
+@@ -26,8 +26,8 @@
+ #include <libdnf5/conf/option_number.hpp>
+ #include <libdnf5/transaction/offline.hpp>
+
+-const std::filesystem::path PATH_TO_PLYMOUTH{"/usr/bin/plymouth"};
+-const std::filesystem::path PATH_TO_JOURNALCTL{"/usr/bin/journalctl"};
++const std::filesystem::path PATH_TO_PLYMOUTH{PREFIX_PATH("/bin/plymouth")};
++const std::filesystem::path PATH_TO_JOURNALCTL{PREFIX_PATH("/bin/journalctl")};
+
+ namespace dnf5 {

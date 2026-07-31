@@ -1,0 +1,61 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Fri, 31 Jul 2026 00:00:00 -0600
+Subject: [PATCH 8/10] Relax rpm version requirement for Termux (rpm 4.18.1)
+
+Termux ships rpm 4.18.1 (termux-packages), while dnf5 declares
+rpm>=4.19.0 because it uses RPMTAG_SYSUSERS and the {pre,post}untrans
+tag constants that were added in rpm 4.19. The API used is otherwise
+compatible with rpm 4.18, so relax the pkg-config version checks to
+rpm>=4.18.0 and provide fallback #defines for the missing tag
+constants (5103, 5104, 5109) so transaction.cpp compiles against
+rpm 4.18 headers.
+
+diff --git a/dnf5/CMakeLists.txt b/dnf5/CMakeLists.txt
+--- a/dnf5/CMakeLists.txt
++++ b/dnf5/CMakeLists.txt
+@@ -42,7 +42,7 @@
+ target_link_libraries(dnf5 PRIVATE common_obj libdnf5 libdnf5-cli Threads::Threads)
+ install(TARGETS dnf5 RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+ 
+-pkg_check_modules(RPM REQUIRED rpm>=4.19.0)
++pkg_check_modules(RPM REQUIRED rpm>=4.18.0)
+ 
+ if(WITH_SYSTEMD)
+   include(sdbus_cpp)
+diff --git a/libdnf5/CMakeLists.txt b/libdnf5/CMakeLists.txt
+--- a/libdnf5/CMakeLists.txt
++++ b/libdnf5/CMakeLists.txt
+@@ -96,6 +96,6 @@
+ target_link_libraries(libdnf5_iface INTERFACE ${LIBSOLVEXT_LIBRARIES})
+ 
+-pkg_check_modules(RPM REQUIRED rpm>=4.19.0)
++pkg_check_modules(RPM REQUIRED rpm>=4.18.0)
+ list(APPEND LIBDNF5_PC_REQUIRES "${RPM_MODULE_NAME}")
+ target_link_libraries(libdnf5 PRIVATE ${RPM_LIBRARIES})
+ target_link_libraries(libdnf5_iface INTERFACE ${RPM_LIBRARIES})
+diff --git a/libdnf5/rpm/transaction.cpp b/libdnf5/rpm/transaction.cpp
+--- a/libdnf5/rpm/transaction.cpp
++++ b/libdnf5/rpm/transaction.cpp
+@@ -472,8 +472,22 @@
+         }
+     }
+     return 0;
+ }
+ 
++// Fallbacks for rpm < 4.19 (Termux ships rpm 4.18.1): RPMTAG_PREUNTRANS,
++// RPMTAG_POSTUNTRANS and RPMTAG_SYSUSERS were added in rpm 4.19. They are
++// enum constants (not macros), so #ifndef always resolves to true and the
++// #defines below take effect, mapping the tokens to their rpm 4.19 values.
++#ifndef RPMTAG_PREUNTRANS
++#define RPMTAG_PREUNTRANS 5103
++#endif
++#ifndef RPMTAG_POSTUNTRANS
++#define RPMTAG_POSTUNTRANS 5104
++#endif
++#ifndef RPMTAG_SYSUSERS
++#define RPMTAG_SYSUSERS 5109
++#endif
++
+ TransactionCallbacks::ScriptType Transaction::rpm_tag_to_script_type(rpmTag_e tag) noexcept {
+     switch (tag) {
+         case RPMTAG_PREIN:

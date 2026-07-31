@@ -1,0 +1,87 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Wed, 29 Jul 2026 22:54:00 -0600
+Subject: [PATCH 7/7] Adapt copr plugin paths for Termux ($PREFIX)
+
+Wrap configuration and repo directory paths with PREFIX_PATH.
+Replace hardcoded /tmp with TMPDIR environment variable (with
+TERMUX_PREFIX/tmp fallback) for temporary files.
+
+diff --git a/dnf5-plugins/copr_plugin/copr_constants.hpp b/dnf5-plugins/copr_plugin/copr_constants.hpp
+--- a/dnf5-plugins/copr_plugin/copr_constants.hpp
++++ b/dnf5-plugins/copr_plugin/copr_constants.hpp
+@@ -53,9 +53,18 @@
+       "repository.\n");
+
+
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX ""
++#endif
++#endif
++#define PREFIX_PATH(path) TERMUX_PREFIX path
++
+ constexpr const char * COPR_DEFAULT_HUB = "copr.fedorainfracloud.org";
+ constexpr const char * COPR_DNF5_COMMAND = "dnf5";
+-constexpr const char * COPR_REPO_DIRECTORY = "/etc/yum.repos.d";
++constexpr const char * COPR_REPO_DIRECTORY = PREFIX_PATH("/etc/yum.repos.d");
+
+
+ #endif  // DNF5_COMMANDS_COPR_CONSTANTS_HPP
+diff --git a/dnf5-plugins/copr_plugin/copr_config.cpp b/dnf5-plugins/copr_plugin/copr_config.cpp
+--- a/dnf5-plugins/copr_plugin/copr_config.cpp
++++ b/dnf5-plugins/copr_plugin/copr_config.cpp
+@@ -29,6 +29,15 @@
+ #include <set>
+
+
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX ""
++#endif
++#endif
++#define PREFIX_PATH(path) TERMUX_PREFIX path
++
+ namespace dnf5 {
+
+ void CoprConfig::load_copr_config_file(const std::string & filename) {
+@@ -44,11 +53,11 @@
+     else
+         // TODO(praiskup): Read the default path from configuration.
+         // https://github.com/rpm-software-management/dnf5/issues/513
+-        etc_dir = "/etc";
++        etc_dir = PREFIX_PATH("/etc");
+
+     libdnf5::utils::OSRelease os_release(etc_dir / "os-release");
+
+-    load_copr_config_file("/usr/share/dnf/plugins/copr.vendor.conf");
++    load_copr_config_file(PREFIX_PATH("/share/dnf/plugins/copr.vendor.conf"));
+     load_copr_config_file(etc_dir / "dnf/plugins/copr.vendor.conf");
+     load_copr_config_file(etc_dir / "dnf/plugins/copr.conf");
+
+diff --git a/dnf5-plugins/copr_plugin/json.cpp b/dnf5-plugins/copr_plugin/json.cpp
+--- a/dnf5-plugins/copr_plugin/json.cpp
++++ b/dnf5-plugins/copr_plugin/json.cpp
+@@ -27,8 +27,18 @@
+ #include <iostream>
+ #include <utility>
+ 
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX ""
++#endif
++#endif
++
+ Json::Json(libdnf5::Base & base, const std::string & url) {
+-    auto temp_file = libdnf5::utils::fs::TempFile("/tmp", "dnf5-copr-plugin");
++    const char * tmpdir_env = std::getenv("TMPDIR");
++    std::string tmpdir = tmpdir_env ? tmpdir_env : TERMUX_PREFIX "/tmp";
++    auto temp_file = libdnf5::utils::fs::TempFile(tmpdir, "dnf5-copr-plugin");
+     download_file(base, url, temp_file.get_path());
+     std::ifstream file(temp_file.get_path());
+     std::stringstream buffer;
