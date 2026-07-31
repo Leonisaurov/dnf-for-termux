@@ -1,6 +1,7 @@
 TERMUX_PKG_HOMEPAGE=https://github.com/zchunk/zchunk
 TERMUX_PKG_DESCRIPTION="A file format designed for highly efficient deltas while maintaining good compression"
 TERMUX_PKG_LICENSE="BSD-2-Clause"
+TERMUX_PKG_LICENSE_FILE="LICENSE"
 TERMUX_PKG_MAINTAINER="@termux"
 TERMUX_PKG_VERSION=1.5.3
 TERMUX_PKG_SRCURL=https://github.com/zchunk/zchunk/archive/refs/tags/${TERMUX_PKG_VERSION}.tar.gz

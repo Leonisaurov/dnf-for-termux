@@ -1,6 +1,7 @@
 TERMUX_PKG_HOMEPAGE=https://github.com/openSUSE/libsolv
 TERMUX_PKG_DESCRIPTION="Library for solving packages and reading repositories"
 TERMUX_PKG_LICENSE="BSD-3-Clause"
+TERMUX_PKG_LICENSE_FILE="LICENSE.BSD"
 TERMUX_PKG_MAINTAINER="@termux"
 TERMUX_PKG_VERSION=0.7.39
 TERMUX_PKG_SRCURL=https://github.com/openSUSE/libsolv/archive/refs/tags/${TERMUX_PKG_VERSION}.tar.gz
