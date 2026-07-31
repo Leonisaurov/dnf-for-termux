@@ -31,32 +31,24 @@ jobs:
       fail-fast: false
       matrix:
         pkg: [zchunk, libcomps, libsolv]
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/termux/package-builder:latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Point toolchain to container NDK
+      - name: Materialize termux-packages + overlay de packages/
         run: |
-          mkdir -p "$HOME"
-          ln -sfn /home/builder/lib "$HOME/lib"
-          ls -la "$HOME/lib/" 2>/dev/null || true
-
-      - name: Materialize termux-packages tree
-        run: |
-          git clone --depth 1 https://github.com/termux/termux-packages.git $GITHUB_WORKSPACE/termux-packages
-          cp -r packages/* $GITHUB_WORKSPACE/termux-packages/packages/
+          git clone --depth 1 https://github.com/termux/termux-packages.git "$GITHUB_WORKSPACE/termux-packages"
+          cp -r packages/* "$GITHUB_WORKSPACE/termux-packages/packages/"
 
       - name: Build ${{ matrix.pkg }} (aarch64)
+        working-directory: ${{ github.workspace }}/termux-packages
         run: |
-          cd "$GITHUB_WORKSPACE/termux-packages"
-          ./build-package.sh -a aarch64 -i ${{ matrix.pkg }}
+          ./scripts/run-docker.sh -d ./build-package.sh -I -C -a aarch64 "${{ matrix.pkg }}"
 
       - name: Verify AArch64 architecture
         run: |
           set -e
-          DEB=$(find / -name '*.deb' -path '*/.termux-build/*' 2>/dev/null | head -1)
+          DEB=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.deb' 2>/dev/null | head -1)
           if [ -z "$DEB" ]; then echo "❌ No .deb found"; exit 1; fi
           echo "DEB: $DEB"
           mkdir -p /tmp/extract && dpkg-deb -x "$DEB" /tmp/extract
@@ -77,12 +69,8 @@ jobs:
         run: |
           set -e
           mkdir -p /tmp/artifacts
-          DEB=$(find / -name '*.deb' -path '*/.termux-build/*' 2>/dev/null | head -1)
-          if [ -z "$DEB" ]; then
-            echo "❌ No .deb found to stage — build did not produce an artifact"
-            exit 1
-          fi
-          echo "Staging: $DEB"
+          DEB=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.deb' 2>/dev/null | head -1)
+          if [ -z "$DEB" ]; then echo "❌ No .deb found to stage"; exit 1; fi
           cp "$DEB" /tmp/artifacts/
 
       - name: Upload .deb artifact
