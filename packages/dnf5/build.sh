@@ -73,20 +73,21 @@ termux_step_post_get_source() {
 	patch --forward --batch -p1 < "$TERMUX_PKG_BUILDER_DIR/0002-termux-paths-config-main.diff" || true
 }
 
-# En pre_configure todas las variables del framework ya estan definidas
-# (TERMUX_PKG_EXTRA_CONFIGURE_ARGS se evalua en termux_step_configure_cmake,
-# no al sourcear build.sh), asi que aqui se anade la ruta de toml11.
-# libandroid-glob provee glob()/globfree() (ausentes en bionic). El framework
-# cmake de termux-packages NO propaga $LDFLAGS a los targets cmake (solo a
-# -DCMAKE_LINKER), por eso ademas del LDFLAGS se pasan explicitos los flags
-# de enlazado para libs compartidas y ejecutables (libdnf5.so era el que
-# arrastraba los symbols undefined glob/globfree).
+# toml11 es header-only y no existe como paquete termux; dnf5 hace
+# find_package(toml11 REQUIRED) y usa #include <toml.hpp>. Se descarga a
+# $TERMUX_PKG_TMPDIR y se genera un config minimal para config-mode con
+# include_directories() apuntando al include extraido. En pre_configure
+# todas las variables del framework ya estan definidas, asi que aqui se
+# anade la ruta de toml11 y el resto de ajustes de enlazado.
 termux_step_pre_configure() {
 	LDFLAGS+=" -landroid-glob"
 	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11"
-	# El toolchain del framework compone -L${TERMUX_PREFIX}/lib en CMAKE_*_LINKER_FLAGS;
-	# al sobrescribirlos con -D se pierde ese -L. Incluirlo explícitamente junto a glob.
-	TERMUX_PKG_EXTRA_CONFIGURE_ARGS+=" -DCMAKE_EXE_LINKER_FLAGS=\"-L${TERMUX_PREFIX}/lib ${TERMUX_PREFIX}/lib/libandroid-glob.so\" -DCMAKE_SHARED_LINKER_FLAGS=\"-L${TERMUX_PREFIX}/lib ${TERMUX_PREFIX}/lib/libandroid-glob.so\""
+	# libandroid-glob provee glob()/globfree() (ausentes en bionic). El framework
+	# propaga $LDFLAGS a los enlaces de CMake via -DCMAKE_LINKER=... $LDFLAGS, asi
+	# que basta con anadirlo a LDFLAGS (patron oficial, igual que polybar/putty).
+	# NO pasar -DCMAKE_*_LINKER_FLAGS desde TERMUX_PKG_EXTRA_CONFIGURE_ARGS:
+	# se expande con word-splitting y las comillas/espacios rompen el try-compile
+	# de CMake (run 30657768918: Unterminated quoted string).
 }
 
 # Los confiles se escriben en el MASSAGEDIR (el framework empaqueta desde

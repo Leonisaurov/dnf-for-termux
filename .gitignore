@@ -11,3 +11,6 @@ build/
 # Temp
 *~
 *.swp
+
+# gita artifacts
+err.log
