@@ -1,0 +1,62 @@
+diff --git a/lib/fsm.c b/lib/fsm.c
+index e0db493..8171406 100644
+--- a/lib/fsm.c
++++ b/lib/fsm.c
+@@ -9,6 +9,7 @@
+ #include <utime.h>
+ #include <errno.h>
+ #include <fcntl.h>
++#include <string.h>
+ #if WITH_CAP
+ #include <sys/capability.h>
+ #endif
+@@ -27,6 +28,14 @@
+ 
+ #include "debug.h"
+ 
++#ifndef TERMUX_PREFIX
++#ifdef __ANDROID__
++#define TERMUX_PREFIX "/data/data/com.termux/files/usr"
++#else
++#define TERMUX_PREFIX "/usr"
++#endif
++#endif
++
+ #define	_FSM_DEBUG	0
+ int _fsm_debug = _FSM_DEBUG;
+ 
+@@ -383,6 +392,34 @@ static int ensureDir(rpmPlugins plugins, const char *p, int owned, int create,
+ 	return rc;
+ 
+     int dirfd = fsmOpenat(-1, "/", oflags, 1);
++
++    if (dirfd < 0) {
++	/*
++	 * Android rootless (non-FHS): "/" is not openable (EACCES), which
++	 * would leave dirfd == -1 and every openat(dirfd, ...) below
++	 * failing with EBADF.  Anchor the walk at the Termux prefix (the
++	 * accessible root) and walk the path relative to it.
++	 */
++	int plen = (int) strlen(TERMUX_PREFIX);
++	dirfd = fsmOpenat(-1, TERMUX_PREFIX, oflags, 1);
++	if (dirfd >= 0 && strncmp(p, TERMUX_PREFIX, plen) == 0) {
++	    if (p[plen] == '/')
++		p += plen + 1;		/* walk only the remainder, e.g. "bin" */
++	    else if (p[plen] == '\0')
++		p += plen;		/* p is the prefix root itself */
++	} else if (dirfd >= 0) {
++	    /* Path not under the Termux prefix: refuse rather than walk it
++	     * relative to the prefix and create directories in the wrong
++	     * place. */
++	    if (!quiet)
++		rpmlog(RPMLOG_ERR, _("failed to open dir %s: %s\n"),
++			p, strerror(EPERM));
++	    rc = RPMERR_OPEN_FAILED;
++	    fsmClose(&dirfd);
++	    return rc;
++	}
++    }
++
+     int fd = dirfd; /* special case of "/" */
+ 
+     char *path = xstrdup(p);
