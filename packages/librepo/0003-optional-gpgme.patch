@@ -1,7 +1,11 @@
+# Make GpgME optional: if not found, disable USE_GPGME instead of
+# failing the configure step with FIND_PACKAGE(Gpgme REQUIRED).
+# Contexto regenerado contra el tag 1.20.0 (no master).
+
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -44,9 +44,14 @@
-     ADD_DEFINITIONS(-DUSE_GPGME)
+@@ -41,9 +41,18 @@
+ IF (USE_GPGME)
      PKG_SEARCH_MODULE(GPGME gpgme)
      IF (NOT GPGME_FOUND)
 -        FIND_PACKAGE(Gpgme REQUIRED)
@@ -12,7 +16,11 @@
 +        MESSAGE(STATUS "GPGME not found, USE_GPGME disabled")
 +        SET(USE_GPGME OFF)
 +    ELSE()
-+        SET (GPGME_LIBRARIES "${GPGME_VANILLA_LIBRARIES}")
++        # GPGME_VANILLA_LIBRARIES solo lo define FIND_PACKAGE(Gpgme); con
++        # pkg-config, GPGME_LIBRARIES ya es valido y no debe sobrescribirse.
++        IF (GPGME_VANILLA_LIBRARIES)
++            SET (GPGME_LIBRARIES "${GPGME_VANILLA_LIBRARIES}")
++        ENDIF()
 +    ENDIF()
      IF (ENABLE_SELINUX)
          PKG_CHECK_MODULES(SELINUX REQUIRED libselinux)
