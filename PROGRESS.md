@@ -1,9 +1,10 @@
 # PROGRESS.md — Port de DNF5 a Termux (termux-packages)
 
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
-(`packages/*`, `.github/workflows/build.yml`, `git log`, `gh run list/view`).
+(`packages/*`, `.github/workflows/build.yml`, `scripts/mkrepo.sh`, `git log`,
+`gh run list/view`).
 Fecha del registro: 2026-08-05 (última actualización 2026-08-05, Fase 0.6 — dnf5 validado en
-dispositivo, Fase 0 cerrada).
+dispositivo, Fase 0 cerrada; Fase 0.7 — repo RPM local funcional y validado contra dnf5).
 
 ## Resumen ejecutivo
 
@@ -21,6 +22,10 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   (commits `7c5592f`, `805410d`), validados en CI y **confirmados en el dispositivo: dnf5
   arranca y funciona** (2026-08-05, `.pkg` del run `31071605356`). La Fase 0 queda CERRADA de
   verdad (ver sección "Fase 0.6").
+  Después (Fase 0.7): se creó un **repo RPM local funcional** (`$HOME/dnf-repo/`, 6 RPMs
+  convertidos on-device con rpmbuild desde los `.pkg`, `AutoReqProv: no`) con `repodata/`
+  generada por el nuevo `scripts/mkrepo.sh` (commit `4bfb93e`), y la cadena repo→repoquery fue
+  validada contra el dnf5 5.4.2.1 real del dispositivo (ver sección "Fase 0.7").
 
 ## Stack de paquetes
 
@@ -193,18 +198,86 @@ contra `git log`, `.github/workflows/build.yml`, `packages/*/build.sh` y `gh run
 (cross-compilación + empaquetado pacman + instalación real + ejecución real de dnf5). La
 Fase 2 (repo RPM/GitHub Pages) sigue pendiente y podría publicar estos `.pkg`.
 
+## Fase 0.7 — Repo RPM local y "cómo se le ponen paquetes" a dnf5
+
+Sesión posterior a la validación de la Fase 0.6 (2026-08-05). Con dnf5 5.4.2.1 ya ejecutándose
+en el dispositivo, esta fase responde operativamente a la pregunta "¿cómo se le ponen paquetes
+a dnf5 en Termux?": se creó un repo RPM local y se validó la cadena repo→repoquery contra el
+propio dnf5. Estado verificado contra `git log`, `scripts/mkrepo.sh`,
+`ls $HOME/dnf-repo/` y `$PREFIX/etc/yum.repos.d/`.
+
+### Repo RPM local funcional: `$HOME/dnf-repo/`
+
+Se creó `$HOME/dnf-repo/` con 6 RPMs y `repodata/` completa. Los 5 RPMs del stack se
+**convirtieron on-device** desde los `.pkg` con `rpmbuild` (`AutoReqProv: no`); el 6º
+(`dnf-hello`) es un paquete de prueba.
+
+| RPM | Versión | Origen | Arch |
+|---|---|---|---|
+| dnf-hello | 1.0-1 | paquete de prueba (hello world de dnf) | aarch64 |
+| zchunk | 1.5.3-0 | convertido desde `.pkg` | aarch64 |
+| libcomps | 0.1.24-0 | convertido desde `.pkg` | aarch64 |
+| libsolv | 0.7.39-1 | convertido desde `.pkg` | aarch64 |
+| librepo | 1.20.0-0 | convertido desde `.pkg` | aarch64 |
+| dnf5 | 5.4.2.1-0 | convertido desde `.pkg` | aarch64 |
+
+`repodata/` contiene `repomd.xml` + `primary.xml.gz` + `filelists.xml.gz` + `other.xml.gz`
+(nombrados con hash sha256 de su contenido).
+
+### `scripts/mkrepo.sh` (commit `4bfb93e`, feat(scripts))
+
+Genera `repodata/` (repomd.xml + primary/filelists/other `.xml.gz`) **sin `createrepo_c`**
+(no existe en Termux). Validado contra el dnf5 5.4.2.1 real del dispositivo:
+
+- `dnf5 repoquery --refresh 'dnf-hello'` → `dnf-hello-0:1.0-1.aarch64`
+- `dnf5 repoquery --refresh 'zchunk'` → `zchunk-0:1.5.3-0`
+- `dnf5 repolist` muestra el repo `termux-local`
+
+Bug corregido durante la validación: `rpm -qip` vs `rpm -qp` con `IFS='|'` (el `-i` en
+`rpm -qp --qf ...` inyectaba la cabecera de formato y rompía el parseo de los campos).
+
+### Cómo se le ponen paquetes a dnf5 (respuesta operativa)
+
+1. **Directo** — `dnf5 install ./<pkg>.rpm`: instala un RPM individual por ruta de archivo.
+2. **Repo local** — archivo `$PREFIX/etc/yum.repos.d/termux-local.repo` con:
+   ```
+   [termux-local]
+   name=Termux Local RPM Repository
+   baseurl=file://$HOME/dnf-repo
+   gpgcheck=0
+   ```
+   y luego `dnf5 install dnf-hello` (o `dnf5 install zchunk`) resuelve e instala por nombre
+   desde el repo.
+
+Nota: el repo `termux` del sistema (`$PREFIX/etc/yum.repos.d/termux.repo`,
+`baseurl=https://packages.termux.dev/rpm/`, `gpgcheck=1`) sigue siendo un **placeholder 404**;
+la pregunta de convertir el ecosistema Termux completo a RPM queda para la Fase 2.
+
+### Herramientas del dispositivo
+
+`rpm`, `rpmbuild`, `rpm2cpio`, `gpg` (GnuPG 2.5.17) y `dnf5` están **completos** en el
+dispositivo. `createrepo_c` **NO existe** (mitigado con `scripts/mkrepo.sh`).
+
+**Conclusión (Fase 0.7)**: la cadena "RPMs → `repodata/` → repo `file://` → `dnf5 repoquery`"
+funciona de extremo a extremo contra el dnf5 real del dispositivo. El mecanismo operativo para
+alimentar dnf5 en Termux queda documentado y validado; la Fase 2 (repo GitHub Pages firmado +
+CI que emita RPMs) tiene ahora su base técnica probada.
+
 ## Último estado exacto para retomar
 
-- **Último commit**: `805410d` — "fix(librepo): keep pkg-config GPGME_LIBRARIES so -lgpgme is
-  linked (0003 hunk vs 1.20.0)". Precedidos por `7c5592f` (zchunk `pre_massage`) y `c381c0d`
-  (CI en formato pacman).
+- **Último commit**: `4bfb93e` — "feat(scripts): add mkrepo.sh — RPM repodata generator without
+  createrepo_c (Phase 2 tooling)". Le precede `4269a3b` (docs: PROGRESS.md, Fase 0 cerrada /
+  dnf5 validado). Los fixes de la Fase 0.6 (`c381c0d` CI pacman, `7c5592f` zchunk, `805410d`
+  librepo) quedaron más atrás en la historia.
 - **Últimos runs disparados**: `31065452556` y `31071605356` — **SUCCESS 6/6** en formato
   pacman (todos los jobs de la matrix: `validate`, `build (zchunk)`, `build (libcomps)`,
   `build (libsolv)`, `build (librepo)`, `build (dnf5)`). `31071605356` valida los fixes
   `7c5592f` + `805410d`.
-- **Validación en dispositivo**: COMPLETADA — dnf5 funciona tras `pacman -U` de los `.pkg`
-  corregidos del run `31071605356` (`$HOME/dnf-pkgs-new2/`), confirmado por el usuario
-  (2026-08-05). No queda nada pendiente de la Fase 0.
+- **Validación en dispositivo**: COMPLETADA (Fase 0) — dnf5 funciona tras `pacman -U` de los
+  `.pkg` corregidos del run `31071605356` (`$HOME/dnf-pkgs-new2/`), confirmado por el usuario
+  (2026-08-05). Además (Fase 0.7): `dnf5 repoquery --refresh` contra `$HOME/dnf-repo/` devuelve
+  `dnf-hello-0:1.0-1.aarch64` y `zchunk-0:1.5.3-0`, y `dnf5 repolist` muestra `termux-local`.
+  Pendiente: ejecutar `dnf5 install` en el dispositivo (lo hace el usuario).
 - **Artifacts para el dispositivo**: `.pkg.tar.xz` corregidos en `$HOME/dnf-pkgs-new2/`
   (`dnf5-5.4.2.1-0`, `libsolv-0.7.39-1`, `librepo-1.20.0-0`, `libcomps-0.1.24-0`,
   `zchunk-1.5.3-0`); se instalan con `pacman -U`.
@@ -227,23 +300,31 @@ Fase 2 (repo RPM/GitHub Pages) sigue pendiente y podría publicar estos `.pkg`.
 - **`packages/zchunk/build.sh`** añade `termux_step_pre_massage()` (commit `7c5592f`) que
   elimina `argp.h`/`libargp.a` del staging; **`packages/librepo/0003-optional-gpgme.patch`**
   regenerado (commit `805410d`) conserva `GPGME_LIBRARIES` del pkg-config.
-- **`git status --short`**: `?? PROGRESS.md` (este documento, sin commitear). `err.log` ya está
-  en `.gitignore` (commit ad550f0), así que ya no aparece como untracked.
+- **`git status --short`**: PROGRESS.md ya está commiteado (docs `1756fbe`, `4269a3b`). Los
+  untracked actuales son los scripts de soporte `up-massage.sh`, `up-start.sh`,
+  `up-termux_step_massage.sh`, `up-vars.sh`. `err.log` ya está en `.gitignore` (commit ad550f0).
 - **Próximos pasos (siguiente sesión)**:
-  1. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
-  2. T11: code review de `packages/` y `.github/workflows/build.yml`.
-  3. T12: reporte final.
-  4. Fase 2: repo RPM/GitHub Pages (podría publicar estos `.pkg`).
+  1. **Validar `dnf5 install`** en el dispositivo (lo ejecuta el usuario): directo
+     `dnf5 install ./dnf-hello-1.0-1.aarch64.rpm` y desde repo `dnf5 install dnf-hello` /
+     `dnf5 install zchunk` con `termux-local.repo`.
+  2. Fase 2 completa: repo **GitHub Pages firmado** (con `scripts/mkrepo.sh`) + CI que emita
+     RPMs (los RPMs on-device de `$HOME/dnf-repo/` sirven de prueba del formato).
+  3. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
+  4. T11: code review de `packages/` y `.github/workflows/build.yml`.
+  5. T12: reporte final.
   El HITO de la Fase 0 está completo (en formato deb y pacman) y **dnf5 VALIDADO en el
   dispositivo** (2026-08-05); la pregunta de "iterar dnf5 o pausar" queda RESUELTA (ya no hay
-  que iterar).
+  que iterar). La Fase 0.7 dejó además un repo RPM local funcional y validado contra dnf5.
 
 ## Pendiente (no empezado)
 
+- **Validar `dnf5 install`** en el dispositivo (dnf-hello y zchunk; directo y vía repo) — lo
+  ejecuta el usuario (próximo paso natural tras la Fase 0.7).
 - **T10**: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
 - **T11**: code review de `packages/` y `.github/workflows/build.yml`.
 - **T12**: reporte final.
-- **Fase 2**: repo RPM/GitHub Pages (podría publicar los `.pkg` validados de la Fase 0).
+- **Fase 2**: repo RPM/GitHub Pages **firmado** + CI que emita RPMs (los `.pkg` validados de la
+  Fase 0 y los RPMs on-device de `$HOME/dnf-repo/` son el material de partida).
 
 ## Preguntas de Seguimiento (para el usuario)
 
@@ -251,4 +332,14 @@ Fase 2 (repo RPM/GitHub Pages) sigue pendiente y podría publicar estos `.pkg`.
   GitHub Pages de este repo, o se deja el plan para Fase 2? (Con el CI en formato pacman, los
   artifacts de ese repo serían `.pkg.tar.xz` aarch64; ahora que dnf5 está validado en el
   dispositivo, estos `.pkg` son publicables.)
+- **(a) Repo local permanente**: ¿crear de forma permanente `termux-local.repo`
+  (`$PREFIX/etc/yum.repos.d/`) apuntando a `$HOME/dnf-repo/`, o esperar a la Fase 2 con GitHub
+  Pages (donde `baseurl` sería `https://.../rpm/`)? Hoy solo existe `termux.repo` (placeholder
+  404 del sistema).
+- **(b) Firmado GPG**: ¿firmar el repo con GPG (`gpgcheck=1`, `gpgkey=`) usando GnuPG 2.5.17
+  disponible en el dispositivo, o mantener `gpgcheck=0` por ahora? El `termux.repo` del sistema
+  ya declara `gpgcheck=1`.
+- **(c) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el
+  gran reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
+  rpmbuild/`scripts/mkrepo.sh`).
 - ¿Se continúa con T10 (install script), T11 (code review), T12 (reporte final)?
