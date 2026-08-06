@@ -6,9 +6,11 @@
 #   1. Clona termux-packages y copia packages/* (overlay) encima.
 #   2. ./build-package.sh -a aarch64 -i <paquete>  → -i descarga las deps
 #      YA COMPILADAS del repo oficial de Termux (solo compila el paquete pedido).
-#   3. Verifica que los binarios/ELF del .deb generado son AArch64.
-# Los .deb quedan en /home/builder/.termux-build/<paquete>/*.deb
-# (build-package.sh es idempotente: no recompila si el .deb ya existe).
+#   3. Verifica que los binarios/ELF del .pkg.tar.xz generado son AArch64.
+# Los .pkg.tar.xz quedan en termux-packages/output/<paquete>-<version>-aarch64.pkg.tar.xz
+# (build-package.sh es idempotente: no recompila si el paquete ya existe).
+# Formato de salida: pacman (TERMUX_PACKAGE_FORMAT=pacman inyectado al container
+# vía TERMUX_DOCKER_EXEC_EXTRA_ARGS, que run-docker.sh pasa a 'docker exec').
 # ============================================================================
 
 name: build
@@ -67,20 +69,22 @@ jobs:
             # que solo se instalan con ENABLE_COMPLEX_DEPS=ON. Compilamos NUESTRO libsolv
             # primero (queda instalado en el prefijo del container) para que dnf5 lo use
             # en vez del oficial (sin el flag).
-            ./scripts/run-docker.sh -d ./build-package.sh -a aarch64 libsolv
+            TERMUX_DOCKER_EXEC_EXTRA_ARGS="--env TERMUX_PACKAGE_FORMAT=pacman" ./scripts/run-docker.sh -d ./build-package.sh -a aarch64 libsolv
           fi
-          ./scripts/run-docker.sh -d ./build-package.sh -I -C -a aarch64 "${{ matrix.pkg }}"
+          # Salida en formato pacman (.pkg.tar.xz). Se inyecta TERMUX_PACKAGE_FORMAT=pacman
+          # vía TERMUX_DOCKER_EXEC_EXTRA_ARGS (run-docker.sh lo pasa a 'docker exec').
+          TERMUX_DOCKER_EXEC_EXTRA_ARGS="--env TERMUX_PACKAGE_FORMAT=pacman" ./scripts/run-docker.sh -d ./build-package.sh -I -C -a aarch64 "${{ matrix.pkg }}"
 
       - name: Verify AArch64 architecture
         run: |
           set -e
-          DEBS=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.deb' 2>/dev/null)
-          if [ -z "$DEBS" ]; then echo "❌ No .deb found"; exit 1; fi
+          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.pkg.tar.*' 2>/dev/null)
+          if [ -z "$PKGS" ]; then echo "❌ No .pkg.tar.* found"; exit 1; fi
           NON_ARCH=0
-          for DEB in $DEBS; do
-            echo "Verificando: $DEB"
+          for PKG in $PKGS; do
+            echo "Verificando: $PKG"
             rm -rf /tmp/extract && mkdir -p /tmp/extract
-            dpkg-deb -x "$DEB" /tmp/extract
+            tar -xf "$PKG" -C /tmp/extract
             while IFS= read -r f; do
               FT=$(file "$f")
               echo "$FT"
@@ -94,15 +98,19 @@ jobs:
           done
           exit $NON_ARCH
 
-      - name: Stage .deb artifact
+      - name: Stage .pkg.tar.xz artifact
         run: |
           set -e
           mkdir -p /tmp/artifacts
-          DEB=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.deb' 2>/dev/null | head -1)
-          if [ -z "$DEB" ]; then echo "❌ No .deb found to stage"; exit 1; fi
-          cp "$DEB" /tmp/artifacts/
+          # Nombre pacman: <pkgname>-<version>-<arch>.pkg.tar.xz (separador '-',
+          # ver termux_step_create_pacman_package.sh). El prefijo [0-9] tras el
+          # nombre del paquete evita capturar subpaquetes con sufijo (p.ej.
+          # zchunk-static-... o libsolv-... en el job de dnf5).
+          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" -name "${{ matrix.pkg }}-[0-9]*.pkg.tar.*" 2>/dev/null)
+          if [ -z "$PKGS" ]; then echo "❌ No ${{ matrix.pkg }}-[0-9]*.pkg.tar.* found to stage"; exit 1; fi
+          cp $PKGS /tmp/artifacts/
 
-      - name: Upload .deb artifact
+      - name: Upload .pkg.tar.xz artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.pkg }}-aarch64
