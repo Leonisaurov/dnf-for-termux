@@ -2,7 +2,7 @@
 
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `git log`, `gh run list/view`).
-Fecha del registro: 2026-08-05.
+Fecha del registro: 2026-08-05 (última actualización 2026-08-05/06, Fase 0.6).
 
 ## Resumen ejecutivo
 
@@ -13,8 +13,12 @@ ESTADO: 5/5 paquetes del stack compilan y verifican AArch64 en CI (zchunk, libco
 librepo, dnf5 5.4.2.1 ✅). Se iteraron 36 runs de CI en la sesión (33 con fallo, 3 exitosos
 con la matriz previa a dnf5); los 13 runs de la iteración de dnf5 están documentados con su
 causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la causa raíz del
-fallo del try-compile: las comillas dobles heredadas al shell de CMake desde los overrides
-`-DCMAKE_EXE_LINKER_FLAGS`/`-DCMAKE_SHARED_LINKER_FLAGS` vía `TERMUX_PKG_EXTRA_CONFIGURE_ARGS`.
+  fallo del try-compile: las comillas dobles heredadas al shell de CMake desde los overrides
+  `-DCMAKE_EXE_LINKER_FLAGS`/`-DCMAKE_SHARED_LINKER_FLAGS` vía `TERMUX_PKG_EXTRA_CONFIGURE_ARGS`.
+  Después del HITO, la sesión continuó (Fase 0.6): el CI pasó a emitir paquetes **PACMAN**
+  (no deb) y una prueba real en dispositivo reveló 2 bugs de empaquetado/enlazado, ya fijados
+  (commits `7c5592f`, `805410d`) y validados en CI; pendiente solo la confirmación de que
+  `dnf5` arranca en el dispositivo (ver sección "Fase 0.6").
 
 ## Stack de paquetes
 
@@ -130,13 +134,68 @@ Historia completa de la iteración, verificada contra `gh run view --log-failed`
 **HITO 5/5**. La Fase 0 (demostrar cross-compilación aarch64 real de todo el stack) queda
 COMPLETADA.
 
+## Fase 0.6 — CI en formato pacman y validación real en dispositivo
+
+Sesión posterior al HITO 5/5 (2026-08-05/06). El CI pasó de emitir `.deb` a emitir paquetes
+**PACMAN** (`.pkg.tar.xz`, el formato real del dispositivo) y una prueba real del usuario en
+Termux reveló 2 bugs de empaquetado/enlazado, ya fijados y validados en CI. Estado verificado
+contra `git log`, `.github/workflows/build.yml`, `packages/*/build.sh` y `gh run`.
+
+### Runs recientes
+
+| Run ID | Formato | Resultado | Artifacts | Notas |
+|---|---|---|---|---|
+| 31060791791 | deb | ✅ SUCCESS 6/6 | `.deb` (artifacts corruptos) | dnf5-aarch64 contenía `freetype-static`; librepo/zchunk contenían `zchunk-static` (duplicado) → `.deb` de dnf5 irrecuperable; motivó la migración a pacman |
+| 31065452556 | pacman | ✅ SUCCESS 6/6 | `.pkg` correctos | commit `c381c0d`; `dnf5-5.4.2.1-0`, `libsolv-0.7.39-1`, `librepo-1.20.0-0`, `libcomps-0.1.24-0`, `zchunk-1.5.3-0` |
+| 31071605356 | pacman | ✅ SUCCESS 6/6 | `.pkg` corregidos | valida los fixes `7c5592f` (zchunk) + `805410d` (librepo); copiados a `$HOME/dnf-pkgs-new2/` |
+
+### Migración a PACMAN (commit `c381c0d`)
+
+- `build.yml` inyecta `TERMUX_PACKAGE_FORMAT=pacman` al container vía
+  `TERMUX_DOCKER_EXEC_EXTRA_ARGS` (`run-docker.sh` lo pasa a `docker exec`).
+- Fix del staging de artifacts: `find -name "${{ matrix.pkg }}-[0-9]*.pkg.tar.*"` en vez del
+  `find | head -1` anterior, que subía el primer `.deb` de cualquier dependencia.
+- El dispositivo usa **PACMAN** (termux-pacman 7.1.0-6, root `$PREFIX`, 689+ paquetes), NO
+  apt → los `.pkg` se instalan con `pacman -U`.
+
+### Bugs revelados por la prueba real en dispositivo
+
+| Bug | Síntoma | Causa raíz | Fix (commit) | Verificación |
+|---|---|---|---|---|
+| A — conflicto de empaquetado (zchunk) | conflicto de archivos con el paquete `argp` de Termux | zchunk bundlea `argp.h`/`libargp.a` (bionic no trae argp) y meson los instala en el paquete | `7c5592f`: `termux_step_pre_massage()` en `packages/zchunk/build.sh` elimina `$TERMUX_PKG_MASSAGEDIR/$TERMUX_PREFIX_CLASSICAL/include/argp.h` y `.../lib/libargp.a` | hook verificado en build-package.sh master (L390-393 def, L790 invocación); run `31071605356` 6/6; sin `DEPENDS argp` (bundle estático en los CLIs, el runtime no lo necesita) |
+| B — enlazado (librepo) | `CANNOT LINK EXECUTABLE "dnf5": cannot locate symbol "gpgme_data_new_from_fd"` | `librepo.so` tenía 23 símbolos `gpgme_*` UND sin `DT_NEEDED libgpgme.so`; el patch `0003-optional-gpgme.patch` sobrescribía `GPGME_LIBRARIES` con `GPGME_VANILLA_LIBRARIES` (vacía en la ruta pkg-config) | `805410d`: patch 0003 regenerado contra el tag 1.20.0 (0 fuzz, `git apply --check` OK) con guard `IF(GPGME_VANILLA_LIBRARIES)` + `FIND_PACKAGE(Gpgme QUIET)` + `SET(USE_GPGME OFF)` | run `31071605356`: `DT_NEEDED libgpgme.so` presente en `librepo.so` |
+
+### Auditoría UND/NEEDED de los 37 ELF de los 5 `.pkg`
+
+- `librepo.so` era el ÚNICO `.so` roto (Bug B).
+- `libdnf5.so`, `libdnf5-cli.so`, `libsolv.so`, `libsolvext.so`, `libcomps.so`, `libzck.so`,
+  `bin/dnf5` y todos los binarios/plugins tienen **0 UND sin cobertura**.
+- Los 8 cmd plugins resuelven `dnf5::*` contra el ejecutable (mecanismo normal).
+
+### Estado de la prueba en dispositivo (PENDIENTE)
+
+- El usuario instaló los 5 `.pkg` (con un zchunk local saneado manualmente: re-empaquetado
+  sin `argp.h`, `.MTREE` regenerado y backup `.orig`).
+- Falta reinstalar los `.pkg` corregidos de `librepo` y `zchunk` (run `31071605356`, en
+  `$HOME/dnf-pkgs-new2/`) y confirmar que `dnf5` arranca. **PENDIENTE de resultado.**
+- Instalación en curso: `rpm 4.18.1-2` instalado desde repos; lock huérfano `db.lck` borrado
+  por el usuario; `pacman.conf` intacto (SigLevel `DatabaseRequired PackageOptional` /
+  `LocalFileSigLevel Optional` → `.pkg` sin firma OK).
+
 ## Último estado exacto para retomar
 
-- **Último commit**: `ad550f0` — "fix(dnf5): remove CMAKE linker flag overrides, use LDFLAGS
-  -landroid-glob (fix try-compile quoting)".
-- **Último run disparado**: `31060791791` — **SUCCESS** (todos los jobs de la matrix:
-  `validate`, `build (zchunk)`, `build (libcomps)`, `build (libsolv)`, `build (dnf5)`,
-  `build (librepo)`). El job `build (dnf5)` pasó `Verify AArch64 architecture` ✅.
+- **Último commit**: `805410d` — "fix(librepo): keep pkg-config GPGME_LIBRARIES so -lgpgme is
+  linked (0003 hunk vs 1.20.0)". Precedidos por `7c5592f` (zchunk `pre_massage`) y `c381c0d`
+  (CI en formato pacman).
+- **Últimos runs disparados**: `31065452556` y `31071605356` — **SUCCESS 6/6** en formato
+  pacman (todos los jobs de la matrix: `validate`, `build (zchunk)`, `build (libcomps)`,
+  `build (libsolv)`, `build (librepo)`, `build (dnf5)`). `31071605356` valida los fixes
+  `7c5592f` + `805410d`.
+- **Artifacts para el dispositivo**: `.pkg.tar.xz` corregidos en `$HOME/dnf-pkgs-new2/`
+  (`dnf5-5.4.2.1-0`, `libsolv-0.7.39-1`, `librepo-1.20.0-0`, `libcomps-0.1.24-0`,
+  `zchunk-1.5.3-0`); se instalan con `pacman -U`.
+- **Formato CI**: pacman (`TERMUX_PACKAGE_FORMAT=pacman` vía `TERMUX_DOCKER_EXEC_EXTRA_ARGS`,
+  commit `c381c0d`). El dispositivo usa termux-pacman 7.1.0-6 (root `$PREFIX`, 689+ paquetes).
 - **Archivos de `packages/dnf5/`** (verificado con `ls`):
   - `build.sh`
   - patches: `0001-termux-paths-const-hpp.patch`, `0002-termux-paths-config-main.diff`,
@@ -146,28 +205,40 @@ COMPLETADA.
     `0010-disable-needs-restarting.patch`, `0011-missing-includes.patch`,
     `0012-renameat2-bionic.patch`, `0013-progress-bar-clock.patch`
     (0002 es `.diff` aplicado manualmente en `termux_step_post_get_source` con `|| true`).
-- **`termux_step_pre_configure` actual** (verificado en `build.sh`): `LDFLAGS+=" -landroid-glob"`
-  y `-Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11` (toml11 header-only descargado en
-  `termux_step_post_get_source`). Los overrides `-DCMAKE_EXE_LINKER_FLAGS`/
-  `-DCMAKE_SHARED_LINKER_FLAGS` fueron **eliminados** en ad550f0 (causa raíz del try-compile
-  roto); el framework propaga `$LDFLAGS` a los enlaces de CMake.
+- **`termux_step_pre_configure` actual** (verificado en `packages/dnf5/build.sh`):
+  `LDFLAGS+=" -landroid-glob"` y `-Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11` (toml11
+  header-only descargado en `termux_step_post_get_source`). Los overrides
+  `-DCMAKE_EXE_LINKER_FLAGS`/`-DCMAKE_SHARED_LINKER_FLAGS` fueron **eliminados** en ad550f0
+  (causa raíz del try-compile roto); el framework propaga `$LDFLAGS` a los enlaces de CMake.
+- **`packages/zchunk/build.sh`** añade `termux_step_pre_massage()` (commit `7c5592f`) que
+  elimina `argp.h`/`libargp.a` del staging; **`packages/librepo/0003-optional-gpgme.patch`**
+  regenerado (commit `805410d`) conserva `GPGME_LIBRARIES` del pkg-config.
 - **`git status --short`**: `?? PROGRESS.md` (este documento, sin commitear). `err.log` ya está
   en `.gitignore` (commit ad550f0), así que ya no aparece como untracked.
 - **Próximos pasos (siguiente sesión)**:
-  1. T10: `scripts/install-dnf-termux.sh` para instalar los `.deb` de GitHub Releases.
-  2. T11: code review de `packages/` y `.github/workflows/build.yml`.
-  3. T12: reporte final.
-  El HITO de la Fase 0 está completo; la pregunta de "iterar dnf5 o pausar" queda RESUELTA (ya
-  no hay que iterar).
+  1. Reinstalar los `.pkg` corregidos de `librepo` y `zchunk` (`$HOME/dnf-pkgs-new2/`) y
+     confirmar que `dnf5` arranca (PENDIENTE de la prueba del usuario).
+  2. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
+  3. T11: code review de `packages/` y `.github/workflows/build.yml`.
+  4. T12: reporte final.
+  El HITO de la Fase 0 está completo (en formato deb y pacman); la pregunta de "iterar dnf5 o
+  pausar" queda RESUELTA (ya no hay que iterar).
 
 ## Pendiente (no empezado)
 
-- **T10**: `scripts/install-dnf-termux.sh` para instalar los `.deb` de GitHub Releases.
+- **Prueba en dispositivo**: reinstalar `librepo` y `zchunk` corregidos (run `31071605356`,
+  `$HOME/dnf-pkgs-new2/`) y confirmar que `dnf5` arranca. (PENDIENTE de resultado del usuario)
+- **T10**: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
 - **T11**: code review de `packages/` y `.github/workflows/build.yml`.
 - **T12**: reporte final.
 
 ## Preguntas de Seguimiento (para el usuario)
 
-- ¿El repo RPM para dnf (`yum.repos.d/termux.repo`) será GitHub Pages de este repo, o se deja
-  para Fase 2?
+- **¿Arranca `dnf5` con el `librepo` corregido?** (pendiente de la prueba real del usuario):
+  reinstalar `librepo` y `zchunk` del run `31071605356` (`$HOME/dnf-pkgs-new2/`) con
+  `pacman -U` y confirmar que `dnf5` corre. Con el fix `805410d`, `librepo.so` ya tiene
+  `DT_NEEDED libgpgme.so`, por lo que el fallo `gpgme_data_new_from_fd` no debería repetirse.
+- **Fase 2 (repo RPM/GitHub Pages)**: ¿el repo RPM para dnf (`yum.repos.d/termux.repo`) será
+  GitHub Pages de este repo, o se deja el plan para Fase 2? (Con el CI en formato pacman, los
+  artifacts de ese repo serían `.pkg.tar.xz` aarch64.)
 - ¿Se continúa con T10 (install script), T11 (code review), T12 (reporte final)?
