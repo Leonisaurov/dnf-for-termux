@@ -2,7 +2,8 @@
 
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `git log`, `gh run list/view`).
-Fecha del registro: 2026-08-05 (última actualización 2026-08-05/06, Fase 0.6).
+Fecha del registro: 2026-08-05 (última actualización 2026-08-05, Fase 0.6 — dnf5 validado en
+dispositivo, Fase 0 cerrada).
 
 ## Resumen ejecutivo
 
@@ -17,8 +18,9 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   `-DCMAKE_EXE_LINKER_FLAGS`/`-DCMAKE_SHARED_LINKER_FLAGS` vía `TERMUX_PKG_EXTRA_CONFIGURE_ARGS`.
   Después del HITO, la sesión continuó (Fase 0.6): el CI pasó a emitir paquetes **PACMAN**
   (no deb) y una prueba real en dispositivo reveló 2 bugs de empaquetado/enlazado, ya fijados
-  (commits `7c5592f`, `805410d`) y validados en CI; pendiente solo la confirmación de que
-  `dnf5` arranca en el dispositivo (ver sección "Fase 0.6").
+  (commits `7c5592f`, `805410d`), validados en CI y **confirmados en el dispositivo: dnf5
+  arranca y funciona** (2026-08-05, `.pkg` del run `31071605356`). La Fase 0 queda CERRADA de
+  verdad (ver sección "Fase 0.6").
 
 ## Stack de paquetes
 
@@ -172,15 +174,24 @@ contra `git log`, `.github/workflows/build.yml`, `packages/*/build.sh` y `gh run
   `bin/dnf5` y todos los binarios/plugins tienen **0 UND sin cobertura**.
 - Los 8 cmd plugins resuelven `dnf5::*` contra el ejecutable (mecanismo normal).
 
-### Estado de la prueba en dispositivo (PENDIENTE)
+### Estado de la prueba en dispositivo (COMPLETADO — VALIDADO)
 
-- El usuario instaló los 5 `.pkg` (con un zchunk local saneado manualmente: re-empaquetado
-  sin `argp.h`, `.MTREE` regenerado y backup `.orig`).
-- Falta reinstalar los `.pkg` corregidos de `librepo` y `zchunk` (run `31071605356`, en
-  `$HOME/dnf-pkgs-new2/`) y confirmar que `dnf5` arranca. **PENDIENTE de resultado.**
-- Instalación en curso: `rpm 4.18.1-2` instalado desde repos; lock huérfano `db.lck` borrado
-  por el usuario; `pacman.conf` intacto (SigLevel `DatabaseRequired PackageOptional` /
+- **2026-08-05 — dnf5 VALIDADO en el dispositivo.** El usuario reinstaló los `.pkg` corregidos
+  de `librepo` y `zchunk` (run `31071605356`, `$HOME/dnf-pkgs-new2/`) con `pacman -U` y
+  confirmó que `dnf5` arranca y funciona ("Funciona! Ya lo instale").
+- Cadena de bugs resuelta documentada arriba: Bug A (zchunk, conflicto `argp.h`, fix
+  `7c5592f`) y Bug B (librepo, `gpgme_data_new_from_fd`, fix `805410d`).
+- Historial de la instalación: primero se instalaron los 5 `.pkg` con un zchunk local saneado
+  manualmente (re-empaquetado sin `argp.h`, `.MTREE` regenerado y backup `.orig`); después se
+  reinstalaron los `.pkg` corregidos de `librepo` y `zchunk` con `pacman -U`.
+- Contexto de la instalación: `rpm 4.18.1-2` instalado desde repos; lock huérfano `db.lck`
+  borrado por el usuario; `pacman.conf` intacto (SigLevel `DatabaseRequired PackageOptional` /
   `LocalFileSigLevel Optional` → `.pkg` sin firma OK).
+
+**Conclusión (Fase 0.6)**: ciclo completo cerrado — cross-compilación **aarch64 real** →
+`.pkg.tar.xz` → `pacman -U` → **dnf5 funciona**. La Fase 0 queda CERRADA de verdad
+(cross-compilación + empaquetado pacman + instalación real + ejecución real de dnf5). La
+Fase 2 (repo RPM/GitHub Pages) sigue pendiente y podría publicar estos `.pkg`.
 
 ## Último estado exacto para retomar
 
@@ -191,6 +202,9 @@ contra `git log`, `.github/workflows/build.yml`, `packages/*/build.sh` y `gh run
   pacman (todos los jobs de la matrix: `validate`, `build (zchunk)`, `build (libcomps)`,
   `build (libsolv)`, `build (librepo)`, `build (dnf5)`). `31071605356` valida los fixes
   `7c5592f` + `805410d`.
+- **Validación en dispositivo**: COMPLETADA — dnf5 funciona tras `pacman -U` de los `.pkg`
+  corregidos del run `31071605356` (`$HOME/dnf-pkgs-new2/`), confirmado por el usuario
+  (2026-08-05). No queda nada pendiente de la Fase 0.
 - **Artifacts para el dispositivo**: `.pkg.tar.xz` corregidos en `$HOME/dnf-pkgs-new2/`
   (`dnf5-5.4.2.1-0`, `libsolv-0.7.39-1`, `librepo-1.20.0-0`, `libcomps-0.1.24-0`,
   `zchunk-1.5.3-0`); se instalan con `pacman -U`.
@@ -216,29 +230,25 @@ contra `git log`, `.github/workflows/build.yml`, `packages/*/build.sh` y `gh run
 - **`git status --short`**: `?? PROGRESS.md` (este documento, sin commitear). `err.log` ya está
   en `.gitignore` (commit ad550f0), así que ya no aparece como untracked.
 - **Próximos pasos (siguiente sesión)**:
-  1. Reinstalar los `.pkg` corregidos de `librepo` y `zchunk` (`$HOME/dnf-pkgs-new2/`) y
-     confirmar que `dnf5` arranca (PENDIENTE de la prueba del usuario).
-  2. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
-  3. T11: code review de `packages/` y `.github/workflows/build.yml`.
-  4. T12: reporte final.
-  El HITO de la Fase 0 está completo (en formato deb y pacman); la pregunta de "iterar dnf5 o
-  pausar" queda RESUELTA (ya no hay que iterar).
+  1. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
+  2. T11: code review de `packages/` y `.github/workflows/build.yml`.
+  3. T12: reporte final.
+  4. Fase 2: repo RPM/GitHub Pages (podría publicar estos `.pkg`).
+  El HITO de la Fase 0 está completo (en formato deb y pacman) y **dnf5 VALIDADO en el
+  dispositivo** (2026-08-05); la pregunta de "iterar dnf5 o pausar" queda RESUELTA (ya no hay
+  que iterar).
 
 ## Pendiente (no empezado)
 
-- **Prueba en dispositivo**: reinstalar `librepo` y `zchunk` corregidos (run `31071605356`,
-  `$HOME/dnf-pkgs-new2/`) y confirmar que `dnf5` arranca. (PENDIENTE de resultado del usuario)
 - **T10**: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
 - **T11**: code review de `packages/` y `.github/workflows/build.yml`.
 - **T12**: reporte final.
+- **Fase 2**: repo RPM/GitHub Pages (podría publicar los `.pkg` validados de la Fase 0).
 
 ## Preguntas de Seguimiento (para el usuario)
 
-- **¿Arranca `dnf5` con el `librepo` corregido?** (pendiente de la prueba real del usuario):
-  reinstalar `librepo` y `zchunk` del run `31071605356` (`$HOME/dnf-pkgs-new2/`) con
-  `pacman -U` y confirmar que `dnf5` corre. Con el fix `805410d`, `librepo.so` ya tiene
-  `DT_NEEDED libgpgme.so`, por lo que el fallo `gpgme_data_new_from_fd` no debería repetirse.
 - **Fase 2 (repo RPM/GitHub Pages)**: ¿el repo RPM para dnf (`yum.repos.d/termux.repo`) será
   GitHub Pages de este repo, o se deja el plan para Fase 2? (Con el CI en formato pacman, los
-  artifacts de ese repo serían `.pkg.tar.xz` aarch64.)
+  artifacts de ese repo serían `.pkg.tar.xz` aarch64; ahora que dnf5 está validado en el
+  dispositivo, estos `.pkg` son publicables.)
 - ¿Se continúa con T10 (install script), T11 (code review), T12 (reporte final)?
