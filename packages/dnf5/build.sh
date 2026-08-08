@@ -48,9 +48,12 @@ termux_step_post_get_source() {
 	local toml11_src="$TERMUX_PKG_TMPDIR/toml11-${TOML11_VERSION}"
 	local toml11_cfg="$TERMUX_PKG_TMPDIR/toml11"
 
-	curl -L "https://github.com/ToruNiina/toml11/archive/refs/tags/v${TOML11_VERSION}.tar.gz" -o "$TERMUX_PKG_TMPDIR/toml11.tar.gz"
-	tar -xzf "$TERMUX_PKG_TMPDIR/toml11.tar.gz" -C "$TERMUX_PKG_TMPDIR"
-	rm -f "$TERMUX_PKG_TMPDIR/toml11.tar.gz"
+	# M1: verificacion de checksum antes de extraer (SHA256 fijado en code review T11)
+	local toml11_file="$TERMUX_PKG_TMPDIR/toml11.tar.gz"
+	curl -fL -o "$toml11_file" "https://github.com/ToruNiina/toml11/archive/refs/tags/v${TOML11_VERSION}.tar.gz"
+	echo "af95dab1bbb9b05a597e73d529a7269e13f1869e9ca9bd4779906c5cd96e282b  $toml11_file" | sha256sum -c -
+	tar -xzf "$toml11_file" -C "$TERMUX_PKG_TMPDIR"
+	rm -f "$toml11_file"
 
 	mkdir -p "$toml11_cfg"
 	cat > "$toml11_cfg/toml11Config.cmake" <<-EOF
@@ -72,6 +75,8 @@ termux_step_post_get_source() {
 	EOF
 
 	patch --forward --batch -p1 < "$TERMUX_PKG_BUILDER_DIR/0002-termux-paths-config-main.diff" || true
+	# M2: el 0002 debe haber aplicado (rutas Termux en config_main); si no, falla duro
+	grep -q 'PREFIX_PATH("/etc/dnf/protected.d' libdnf5/conf/config_main.cpp || { echo "ERROR: 0002-termux-paths-config-main.diff no aplico"; exit 1; }
 }
 
 # toml11 es header-only y no existe como paquete termux; dnf5 hace
