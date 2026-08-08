@@ -1,0 +1,46 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Sat, 08 Aug 2026 12:09:00 -0600
+Subject: [PATCH 1/1] Skip uid/gid drop in popt execCommand() when not elevated
+
+rpm --addsign/--checksig/etc. die with SIGSYS on Android because
+execCommand() calls setgid(getgid())+setuid(getuid()) to drop
+privileges before execvp(), and the Android seccomp filter blocks
+those syscalls. Skip the drop when privileges are not actually
+elevated (euid==uid && egid==gid), the same condition popt already
+uses in its #else fallback branch.
+
+diff --git a/src/popt.c b/src/popt.c
+index f3f26a3da1cdd0478edec96910e6c6aa0986f6a3..2d2e69ea1a4211914a59466ec38b303be4698eab 100644
+--- a/src/popt.c
++++ b/src/popt.c
+@@ -507,15 +507,22 @@
+  * XXX	from Norbert Warmuth <nwarmuth@privat.circular.de>
+  */
+ #if defined(HAVE_SETUID)
+-    rc = setgid(getgid());
+-    if (rc) goto exit;
+-    rc = setuid(getuid());
+-    if (rc) goto exit;
++    /* Only drop privileges when they are actually elevated; when the real
++       ids equal the effective ids these syscalls are no-ops and may be
++       blocked by seccomp filters (e.g. Android/Termux). */
++    if (getuid() != geteuid() || getgid() != getegid()) {
++        rc = setgid(getgid());
++        if (rc) goto exit;
++        rc = setuid(getuid());
++        if (rc) goto exit;
++    }
+ #elif defined (HAVE_SETREUID)
+-    rc = setregid(getgid(), getgid());
+-    if (rc) goto exit;
+-    rc = setreuid(getuid(), getuid());
+-    if (rc) goto exit;
++    if (getuid() != geteuid() || getgid() != getegid()) {
++        rc = setregid(getgid(), getgid());
++        if (rc) goto exit;
++        rc = setreuid(getuid(), getuid());
++        if (rc) goto exit;
++    }
+ #else
+     /* refuse to exec if we cannot drop suid/sgid privileges */
+     if (getuid() != geteuid() || getgid() != getegid()) {
