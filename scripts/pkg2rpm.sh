@@ -112,8 +112,8 @@ EOF
 
 echo "spec generado: $SPEC"
 
-# --- 4. build con rpmbuild ---
-rpmbuild -bb --define "_topdir $TOPDIR" "$SPEC"
+# --- 4. build con rpmbuild (--target: el runner es x86_64 pero el rpm es aarch64) ---
+rpmbuild -bb --target "$ARCH" --define "_topdir $TOPDIR" "$SPEC"
 
 # --- copiar el .rpm al dir_salida con nombre <name>-<version>-<release>.<arch>.rpm ---
 RPM="$(find "$TOPDIR/RPMS" -name '*.rpm' | head -1)"
