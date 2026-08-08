@@ -110,7 +110,7 @@ jobs:
           set -e
           # Busca también en /tmp/cached-pkg: en cache-hit el .pkg viene de la caché
           # (el build se skipea) y queremos verificar igualmente el .pkg restaurado.
-          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" /tmp/cached-pkg -name '*.pkg.tar.*' 2>/dev/null)
+          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" /tmp/cached-pkg -name '*.pkg.tar.*' 2>/dev/null || true)
           if [ -z "$PKGS" ]; then echo "❌ No .pkg.tar.* found"; exit 1; fi
           NON_ARCH=0
           for PKG in $PKGS; do
