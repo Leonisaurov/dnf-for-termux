@@ -28,8 +28,8 @@ if [ ! -f "$PKG" ]; then
   exit 1
 fi
 
-# --- staging (bajo $TMPDIR; nunca /tmp en Termux) ---
-STAGING="$(mktemp -d "$TMPDIR/pkg2rpm.XXXXXX")"
+# --- staging (bajo $TMPDIR; nunca /tmp en Termux; fallback para runners) ---
+STAGING="$(mktemp -d "${TMPDIR:-/tmp}/pkg2rpm.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 ROOT="$STAGING/rootfs"
 TOPDIR="$STAGING/rpmbuild"
