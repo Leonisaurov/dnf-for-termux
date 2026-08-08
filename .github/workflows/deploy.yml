@@ -98,18 +98,22 @@ jobs:
           printf '%%_gpg_name dnf-for-termux\n%%__gpg_sign_cmd %s --batch --no-tty --no-verbose --no-armor --output %%{__signature_filename} --detach-sign --local-user %%{_gpg_name} %%{__plaintext_filename}\n' "$GPG_BIN" > "$HOME/.rpmmacros"
           echo "== macro %__gpg_sign_cmd evaluado =="
           rpm --eval '%{__gpg_sign_cmd}'
-          echo "== claves secretas disponibles =="
-          gpg --list-secret-keys --with-colons | grep -E '^(sec|fpr)'
           echo "== firmando =="
           rpm --addsign /tmp/rpm-repo/*.rpm
+          # Exportar la clave pública e importarla en el keyring de rpm (rpm -K
+          # valida contra su propio keyring, no ~/.gnupg; sin esto sale
+          # "digests SIGNATURES NOT OK").
+          "$GPG_BIN" --export --armor > "$HOME/rpm-pubkey.asc"
+          mkdir -p "$HOME/rpmdb"
+          rpm --define "_dbpath $HOME/rpmdb" --import "$HOME/rpm-pubkey.asc"
           echo "== verificación rpm -K (completo) =="
-          rpm -K /tmp/rpm-repo/*.rpm
-          rpm -K /tmp/rpm-repo/*.rpm | grep -c 'signatures OK'   # esperado 8
+          rpm -K --define "_dbpath $HOME/rpmdb" /tmp/rpm-repo/*.rpm
+          rpm -K --define "_dbpath $HOME/rpmdb" /tmp/rpm-repo/*.rpm | grep -c 'signatures OK'   # esperado 8
           # Metadatos del repo y firma del repomd.xml
           createrepo_c /tmp/rpm-repo
           gpg --batch --detach-sign --armor /tmp/rpm-repo/repodata/repomd.xml
           # Clave pública para que dnf5 valide las firmas
-          gpg --export --armor > /tmp/rpm-repo/termux-rpm.gpg
+          "$GPG_BIN" --export --armor > /tmp/rpm-repo/termux-rpm.gpg
 
       # 7. Publicar el repo RPM en la rama gh-pages bajo rpm/
       - name: Publicar en gh-pages
