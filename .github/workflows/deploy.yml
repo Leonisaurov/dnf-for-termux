@@ -84,16 +84,15 @@ jobs:
           done
           ls /tmp/rpm-repo/*.rpm | wc -l            # esperado 8
           # Firmar todos los RPM con la clave "dnf-for-termux" (UID de la clave).
-          # %__gpg_sign_cmd explícito: gpg directo sin agente/pinentry (CI no
-          # tiene TTY; el macro por defecto de Ubuntu falla con
-          # "Could not set GPG_TTY to stdin" y no firma).
-          # IMPORTANTE: %%{__signature_filename} y %%{__plaintext_filename} van
-          # escapados (%% -> %) para que rpm los expanda en tiempo de ejecución
-          # y no al parsear el --define.
-          rpm --addsign \
-            --define "_gpg_name dnf-for-termux" \
-            --define "__gpg_sign_cmd %{__gpg} gpg --batch --no-tty --no-armor --output %%{__signature_filename} --detach-sign --local-user %{_gpg_name} %%{__plaintext_filename}" \
-            /tmp/rpm-repo/*.rpm
+          # %__gpg_sign_cmd se define en ~/.rpmmacros, NO en --define de CLI:
+          # en un archivo de macros las %{__signature_filename}/%{__plaintext_filename}
+          # se expanden de forma DIFERIDA (cuando rpmsign ya las definió), mientras
+          # que en --define se expanden en el momento (vacías) o con escape %%
+          # quedan literales ("gpg: can't open '%{__plaintext_filename}'").
+          # gpg va con --batch --no-tty --no-armor: sin agente/pinentry, apto
+          # para CI sin TTY y para clave sin passphrase.
+          printf '%%_gpg_name dnf-for-termux\n%%__gpg_sign_cmd %%{__gpg} gpg --batch --no-verbose --no-armor --no-tty --output %%{__signature_filename} --detach-sign --local-user %%{_gpg_name} %%{__plaintext_filename}\n' > "$HOME/.rpmmacros"
+          rpm --addsign /tmp/rpm-repo/*.rpm
           rpm -K /tmp/rpm-repo/*.rpm | grep -c 'signatures OK'   # esperado 8
           # Metadatos del repo y firma del repomd.xml
           createrepo_c /tmp/rpm-repo
