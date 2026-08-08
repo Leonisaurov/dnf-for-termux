@@ -3,10 +3,13 @@
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `scripts/mkrepo.sh`, `git log`,
 `gh run list/view`).
-Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.1 — sistema de firma
-GPG del repo implementado y validado en el dispositivo: `termux.repo` con
-`gpgcheck=1 repo_gpgcheck=1`, auto-import de la gpgkey vía patch 0015 y repo firmado en
-gh-pages; previas: Fase 1.0 — dnf5 funcional y sin errores en el dispositivo: `createrepo_c`
+Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.2 — firma de paquetes
+GPG CERRADA: el SIGSYS de rpm resuelto con un patch de libpopt, los 7 RPMs del repo firmados
+con `rpm --addsign` en el dispositivo (`rpm -K` → "digests signatures OK"), repomd re-firmado
+y publicado en gh-pages, dnf5 con `gpgcheck=1 repo_gpgcheck=1` sin errores de firma; previas:
+Fase 1.1 — sistema de firma GPG del repo implementado y validado en el dispositivo:
+`termux.repo` con `gpgcheck=1 repo_gpgcheck=1`, auto-import de la gpgkey vía patch 0015 y repo
+firmado en gh-pages; Fase 1.0 — dnf5 funcional y sin errores en el dispositivo: `createrepo_c`
 portado a Termux y repo local/remoto resueltos; Fase 0.9 — repo RPM remoto en GitHub Pages
 operativo y resoluble desde la URL; Fase 0.8 — dnf5 funcional en el dispositivo: instala y
 ejecuta RPMs reales; Fase 0.7 — repo RPM local funcional; Fase 0.6 — dnf5 validado en
@@ -53,6 +56,20 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   uso**: prompt de importación de la clave → aceptada → instalaciones funcionando vía GPG.
   Además el CI ganó una **caché anti-rebuilds por hash de inputs** (`92eaf7b`, fix `733b9d8`;
   run `31242682232` 8/8 que pobló la caché). Firma GPG CERRADA (ver sección "Fase 1.1").
+  Y después (Fase 1.2, 2026-08-08): la **firma de paquetes GPG quedó CERRADA**. El SIGSYS que
+  mataba a `rpm --addsign`/`--checksig`/etc. en Android se diagnosticó con `strace -k` y tenía
+  su **causa raíz en libpopt** (`src/popt.c` `execCommand()`, ~498-526): llama
+  `setgid(getgid()); setuid(getuid())` para soltar privilegios antes de `execvp()`, y el
+  seccomp de Android bloquea `__NR_setgid` → SIGSYS (NO era gpg ni rpm). El fix:
+  `packages/libpopt/` portado al overlay (REVISION=4 + `src-libpopt.vers.patch` +
+  `termux-no-elevated-exec-drop.patch`), que solo suelta privilegios si
+  `getuid()!=geteuid()||getgid()!=getegid()` (no-op en Android rootless; idéntico en sistemas
+  con setuid real). Commits `84a667f` (paquete) + `a37f14b` (matrix), run CI `31271307345`
+  (9/9). Con libpopt 1.19-4 instalado, `rpm --addsign` funciona en el dispositivo → **los 7
+  .rpm del repo firmados** (`rpm -K` → "digests signatures OK"), repodata regenerada, repomd
+  re-firmado y publicado en gh-pages (`392df86`, HTTP 200); dnf5 con `gpgcheck=1` +
+  `repo_gpgcheck=1` resuelve sin errores de firma (ver sección "Fase 1.2"). PENDIENTE:
+  confirmar la instalación real `gpgcheck=1` en el dispositivo (test del usuario).
 
 ## Stack de paquetes
 
@@ -516,42 +533,121 @@ ausencia de `/tmp/cached-pkg` en cache-miss.
 **Conclusión (Fase 1.1)**: el sistema de firma GPG del repo queda **CERRADO** — repo firmado y
 **validado en el dispositivo** con auto-import de la clave (`gpgcheck/repo_gpgcheck=1`).
 Pendientes: automatizar **deploy + firma en CI** (secret con la clave privada), **crecer el
-ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opcional).
+ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opcional, hoy
+**CERRADA** en la Fase 1.2).
+
+## Fase 1.2 — Firma de paquetes GPG (gpgcheck=1 completo, parche libpopt)
+
+Sesión posterior a la Fase 1.1 (2026-08-08). El paso que quedó **opcional** en la Fase 1.1
+(**firma de paquetes individuales**) quedó **CERRADO**: los **7 RPMs del repo firmados** con
+`rpm --addsign` en el dispositivo. El obstáculo que lo bloqueaba — rpm muriendo con **SIGSYS**
+en Android — quedó **resuelto con un patch de libpopt** (la causa raíz NO era gpg ni rpm).
+Estado verificado contra `git log`, `packages/libpopt/`, `.github/workflows/build.yml`,
+`gh run view 31271307345`, la rama `gh-pages` (commit `392df86`) y el flujo de firma del
+dispositivo.
+
+### ✅ Diagnóstico del SIGSYS de rpm (causa raíz: libpopt)
+
+`rpm --addsign`/`--checksig`/etc. morían con **SIGSYS** en Android. El diagnóstico con
+`strace -k` localizó el origen **fuera de gpg y fuera de rpm**: **libpopt**
+(`src/popt.c` `execCommand()`, ~líneas 498-526) llama `setgid(getgid()); setuid(getuid())`
+para soltar privilegios antes de `execvp()`, y el **seccomp de Android bloquea
+`__NR_setgid`** → SIGSYS.
+
+### ✅ Fix: `packages/libpopt/` portado al overlay (REVISION=4)
+
+- Commit `84a667f` — **port de libpopt 1.19-4 al overlay** con:
+  - `build.sh` con `TERMUX_PKG_REVISION=4` (el oficial de termux-main es 1.19-3).
+  - `src-libpopt.vers.patch` (version script).
+  - `termux-no-elevated-exec-drop.patch`: en `src/popt.c` `execCommand()`, el bloque
+    `HAVE_SETUID` (y el fallback `HAVE_SETREUID`) queda **envuelto en
+    `if (getuid() != geteuid() || getgid() != getegid())`** — solo suelta privilegios cuando
+    están realmente elevados. En **Android rootless es un no-op** (euid==uid && egid==gid) y
+    en sistemas con setuid real el comportamiento es **idéntico** al original.
+- Commit `a37f14b` — `ci(build)`: añade `libpopt` a la matrix.
+- Run CI **`31271307345`** — **SUCCESS 9/9**: `validate` + `build (zchunk)`,
+  `build (libcomps)`, `build (libsolv)`, `build (librepo)`, `build (rpm)`,
+  `build (createrepo-c)`, **`build (libpopt)`** y `build (dnf5)`, todos con
+  `Verify AArch64`.
+
+### ✅ Resultado: los 7 RPMs del repo firmados y publicados
+
+- **libpopt 1.19-4 instalado** en el dispositivo → **`rpm --addsign` funciona**.
+- **Los 7 `.rpm` del repo firmados**: `rpm -K` → **"digests signatures OK"**.
+- `repodata/` **regenerada** y `repomd.xml` **re-firmado**; publicado a **gh-pages**
+  (commit `392df86` — "publish signed RPM repo (7 packages GPG-signed, repomd re-signed)",
+  HTTP 200).
+- **dnf5 con `gpgcheck=1` + `repo_gpgcheck=1` resuelve sin errores de firma**.
+- **Flujo de firma en dispositivo** (documentado):
+  ```
+  GNUPGHOME=$HOME/dnf-gpg rpm --addsign --define "_gpg_name dnf-for-termux" *.rpm
+  scripts/mkrepo.sh                              # regenerar repodata/
+  gpg --detach-sign <repomd.xml>                 # re-firmar repomd.xml
+  git push                                       # publicar en gh-pages
+  ```
+- **PENDIENTE**: confirmar la **instalación real con `gpgcheck=1`** en el dispositivo (test
+  del usuario).
+
+### Commits y run de la Fase 1.2
+
+| Commit | Área | Qué hace |
+|---|---|---|
+| `84a667f` | libpopt | **port de libpopt 1.19-4** al overlay (REVISION=4, `src-libpopt.vers.patch`, `termux-no-elevated-exec-drop.patch`) — fix del SIGSYS de rpm en Android |
+| `a37f14b` | CI | añade `libpopt` a la matrix |
+| `392df86` | gh-pages | publica el repo firmado: 7 RPMs GPG-firmados + `repomd.xml` re-firmado |
+
+| Run ID | Resultado | Notas |
+|---|---|---|
+| `31271307345` | ✅ SUCCESS 9/9 | todos los jobs de la matrix, incluido `build (libpopt)` con `Verify AArch64` |
+
+**Conclusión (Fase 1.2)**: la **firma de paquetes GPG queda CERRADA** — `rpm --addsign`
+funciona en el dispositivo (patch de libpopt que evita el SIGSYS), los **7 RPMs del repo
+están firmados** y el repo publicado en gh-pages valida con `gpgcheck=1 repo_gpgcheck=1` sin
+errores de firma. Pendientes: **confirmar la instalación real `gpgcheck=1`** en el
+dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + firma en CI) y
+**crecer el ecosistema** (más RPMs en el repo).
 
 ## Último estado exacto para retomar
 
-- **Último commit**: `733b9d8` — `ci(build): fix Verify step — tolerate missing
-  /tmp/cached-pkg on cache miss` (fix de la caché por hash de inputs, Fase 1.1). Le preceden
-  `92eaf7b` — caché por hash de inputs por paquete (`ci(build): skip rebuilds when package
-  inputs unchanged`), `9b01c22` — `termux.repo` con `gpgcheck=1 repo_gpgcheck=1
-  gpgkey=.../termux-rpm.gpg` (repo firmado), `8509ddb` — patch `0015-termux-gpg-import-trigger`
-  (auto-import de la gpgkey con "Bad GPG signature") y `1874325` (gh-pages) — re-firma de
-  `repomd.xml` + `termux-rpm.gpg` (sistema de firma GPG CERRADO y validado). Más atrás:
-  `4780780` (docs Fase 1.0), `c8f88e5`/`424533d` (createrepo-c en matrix y port),
-  `889eb4e`/`af949a1`/`e541907` (review T11: 4 MAJOR resueltos M1/M2/M3/M4), `0568f9e` (install
-  script como pacman bootstrap), `52528a6`/`058d61e`/`d14d2fc` (Fase 0.9), `197f036` (rpm en
-  matrix), `3c6532b`/`ac354d0` (fixes de la Fase 0.8), `37b5864` (docs: Fase 0.7), `4bfb93e`
+- **Último commit**: `a37f14b` — `ci(build): add libpopt to matrix` (Fase 1.2). Le preceden
+  `84a667f` — port de libpopt 1.19-4 con `termux-no-elevated-exec-drop.patch` (fix del SIGSYS
+  de rpm: solo suelta privilegios si `getuid()!=geteuid()||getgid()!=getegid()`) y `392df86`
+  (gh-pages) — **publish signed RPM repo (7 packages GPG-signed, repomd re-signed)** (los 7
+  RPMs del repo firmados con `rpm --addsign` en el dispositivo; firma de paquetes GPG
+  CERRADA). Más atrás: `089171c` (uninstall script), `1dfc201` (createrepo-c en el bootstrap),
+  `5529481` (docs Fase 1.1), `733b9d8`/`92eaf7b` (caché anti-rebuilds, Fase 1.1),
+  `9b01c22`/`8509ddb`/`1874325` (sistema de firma GPG del repo), `4780780` (docs Fase 1.0),
+  `c8f88e5`/`424533d` (createrepo-c en matrix y port), `889eb4e`/`af949a1`/`e541907` (review
+  T11: 4 MAJOR resueltos M1/M2/M3/M4), `0568f9e` (install script como pacman bootstrap),
+  `52528a6`/`058d61e`/`d14d2fc` (Fase 0.9), `197f036` (rpm en matrix),
+  `3c6532b`/`ac354d0` (fixes de la Fase 0.8), `37b5864` (docs: Fase 0.7), `4bfb93e`
   (mkrepo.sh), `c381c0d`/`7c5592f`/`805410d` (Fase 0.6) y `ad550f0` (fix try-compile, HITO 5/5).
-- **Último run verificado**: `31242682232` — **SUCCESS 8/8** (Fase 1.1): todos los jobs de la
-  matrix con `Verify AArch64`, steps `Cache built package` + `Populate cache with built .pkg`
-  (pobló la caché anti-rebuilds por hash de inputs). Runs previos de referencia: `31236591563`
-  (SUCCESS 8/8, Fase 1.0: createrepo-c), `31221704266` (SUCCESS 7/7, Fase 0.8), `31065452556` y
-  `31071605356` (SUCCESS 6/6, Fase 0.6).
-- **Validación en dispositivo**: COMPLETADA (**Fase 1.1**, 2026-08-08) — **sistema de firma GPG
-  del repo VALIDADO**: primer uso → **prompt de importación de la clave** → aceptada →
-  **instalaciones funcionando vía GPG** (`termux.repo` con `gpgcheck=1 repo_gpgcheck=1 gpgkey=
-  .../termux-rpm.gpg`; auto-import vía patch `0015`). Previa (**Fase 1.0**, 2026-08-07) — **dnf5
-  100% sin errores**: el `Createrepo_c process exited with code 255` quedó **resuelto con el
-  port de createrepo-c** y el `Curl error (37)` de `_dnf_local_nogpgcheck` quedó **resuelto
-  inicializando el repo local del plugin** (`$PREFIX/var/lib/dnf/plugins/local-nogpgcheck/` con
-  `createrepo_c`; el plugin `[createrepo] enabled=true` de
-  `$PREFIX/etc/dnf/libdnf5-plugins/local.conf` lo regenera automáticamente). Repo remoto GitHub
-  Pages **operativo** con `gpgcheck=1`, **resolución desde repo OK** (fix `058d61e`) e
-  **install/reinstall OK**. Histórico: **HITO Fase 0.8** (2026-08-06) —
-  `dnf5 --disablerepo='*' install ./dnf-hello-1.0-1.aarch64.rpm` y **`dnf-hello` funciona**
-  (requiere el **rpm 4.18.1-2 patcheado**, instalado desde `$HOME/dnf-pkgs-new4/`). Fase 0.7:
-  `dnf5 repoquery --refresh` contra `$HOME/dnf-repo/` devuelve `dnf-hello-0:1.0-1.aarch64` y
-  `zchunk-0:1.5.3-0`, y `dnf5 repolist` muestra `termux-local`.
+- **Último run verificado**: `31271307345` — **SUCCESS 9/9** (Fase 1.2): todos los jobs de la
+  matrix, incluido **`build (libpopt)`** con `Verify AArch64` (valida el port que arregla el
+  SIGSYS de rpm). Runs previos de referencia: `31242682232` (SUCCESS 8/8, Fase 1.1: caché
+  anti-rebuilds poblada), `31236591563` (SUCCESS 8/8, Fase 1.0: createrepo-c), `31221704266`
+  (SUCCESS 7/7, Fase 0.8), `31065452556` y `31071605356` (SUCCESS 6/6, Fase 0.6).
+- **Validación en dispositivo**: COMPLETADA (**Fase 1.2**, 2026-08-08) — **firma de paquetes
+  GPG**: libpopt 1.19-4 instalado → **`rpm --addsign` funciona** → **los 7 RPMs del repo
+  firmados** (`rpm -K` → "digests signatures OK"), `repodata/` regenerada, `repomd.xml`
+  re-firmado y publicado en gh-pages (`392df86`, HTTP 200); dnf5 con
+  `gpgcheck=1 repo_gpgcheck=1` resuelve sin errores de firma. **PENDIENTE**: confirmar la
+  instalación real `gpgcheck=1` (test del usuario). Previa (**Fase 1.1**, 2026-08-08) —
+  **sistema de firma GPG del repo VALIDADO**: primer uso → **prompt de importación de la
+  clave** → aceptada → **instalaciones funcionando vía GPG** (`termux.repo` con
+  `gpgcheck=1 repo_gpgcheck=1 gpgkey=.../termux-rpm.gpg`; auto-import vía patch `0015`). Previa
+  (**Fase 1.0**, 2026-08-07) — **dnf5 100% sin errores**: el
+  `Createrepo_c process exited with code 255` quedó **resuelto con el port de createrepo-c** y
+  el `Curl error (37)` de `_dnf_local_nogpgcheck` quedó **resuelto inicializando el repo local
+  del plugin** (`$PREFIX/var/lib/dnf/plugins/local-nogpgcheck/` con `createrepo_c`; el plugin
+  `[createrepo] enabled=true` de `$PREFIX/etc/dnf/libdnf5-plugins/local.conf` lo regenera
+  automáticamente). Repo remoto GitHub Pages **operativo** con `gpgcheck=1`, **resolución
+  desde repo OK** (fix `058d61e`) e **install/reinstall OK**. Histórico: **HITO Fase 0.8**
+  (2026-08-06) — `dnf5 --disablerepo='*' install ./dnf-hello-1.0-1.aarch64.rpm` y
+  **`dnf-hello` funciona** (requiere el **rpm 4.18.1-2 patcheado**, instalado desde
+  `$HOME/dnf-pkgs-new4/`). Fase 0.7: `dnf5 repoquery --refresh` contra `$HOME/dnf-repo/`
+  devuelve `dnf-hello-0:1.0-1.aarch64` y `zchunk-0:1.5.3-0`, y `dnf5 repolist` muestra
+  `termux-local`.
 - **Artifacts para el dispositivo**: en `$HOME/dnf-pkgs-new4/` (run `31221704266`):
   `rpm-4.18.1-2-aarch64.pkg.tar.xz` (parcheado, **obligatorio**) y
   `dnf5-5.4.2.1-0-aarch64.pkg.tar.xz`; **ambos ya instalados** en el dispositivo con `pacman -U`.
@@ -573,6 +669,13 @@ ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opc
   `ensureDir()` de `lib/fsm.c` en TERMUX_PREFIX cuando `open("/")` da EACCES por SELinux en
   Android rootless; ruta fuera del prefix → rechazo `failed to open dir %s: %s`). Se añadió a la
   matrix del CI (commit `197f036`).
+- **`packages/libpopt/`** (nuevo, commits `84a667f` + `a37f14b`, libpopt 1.19 REVISION=4):
+  `build.sh` y los patches `src-libpopt.vers.patch` + `termux-no-elevated-exec-drop.patch`
+  (envuelve el drop de privilegios de `execCommand()` en
+  `if (getuid() != geteuid() || getgid() != getegid())` — no-op en Android rootless, evita el
+  SIGSYS de `__NR_setgid` del seccomp; idéntico a upstream en sistemas con setuid real). Añadido
+  a la matrix (commit `a37f14b`), run `31271307345` 9/9; **libpopt 1.19-4 instalado en el
+  dispositivo** (requisito para `rpm --addsign`).
 - **`termux_step_pre_configure` actual** (verificado en `packages/dnf5/build.sh`):
   `LDFLAGS+=" -landroid-glob"` y `-Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11` (toml11
   header-only descargado en `termux_step_post_get_source`). Los overrides
@@ -586,35 +689,43 @@ ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opc
   investigación (`up-*.sh`, `err.log`) ya está en `.gitignore` (commit `8f3ef23`, que además
   eliminó los `patches/` legados y scripts rotos).
 - **Próximos pasos (siguiente sesión)**:
-  1. **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, firme `repomd.xml`
-     y publique en gh-pages usando un **secret con la clave privada** de la firma GPG (hoy el
-     deploy y la firma son manuales; el repo ya está firmado, commit `1874325`).
-  2. **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
+  1. **Confirmar la instalación real con `gpgcheck=1`** en el dispositivo: test del usuario de
+     `dnf5 install` desde el repo firmado (los 7 RPMs firmados, `392df86`; el repo ya resuelve
+     sin errores de firma, falta la confirmación de instalación real).
+  2. **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, **firme los RPMs
+     con `rpm --addsign`** y re-firme `repomd.xml` al publicar nuevos paquetes, usando un
+     **secret con la clave privada** de la firma GPG (hoy el deploy y la firma son manuales;
+     repo ya firmado, commits `1874325` + `392df86`).
+  3. **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
      RPM en CI; los 689+ paquetes del dispositivo tendrían que pasar por rpmbuild/CI).
-  3. **T12: reporte formal.**
-  4. **Firma de paquetes individuales (opcional)**: con el repo firmado, firmar también los
-     RPMs individuales.
+  4. **T12: reporte formal.**
   5. **Test del install script**: probar `scripts/install-dnf-termux.sh` (commit `0568f9e`,
      reescrito como pacman bootstrap: `gh download` + `pacman -U`) de extremo a extremo.
-  El sistema de firma GPG quedó **CERRADO** (Fase 1.1, 2026-08-08): repo firmado y **validado en
-  el dispositivo** con auto-import de la clave (`8509ddb`, `9b01c22`, `1874325`); caché
-  anti-rebuilds en CI (`92eaf7b`, fix `733b9d8`; run `31242682232` 8/8 que pobló la caché). La
-  Fase 2 operativa quedó **CERRADA** (Fase 1.0, 2026-08-07): **dnf5 funciona 100% sin errores en
-  el dispositivo** (repo local del plugin y repo remoto GitHub Pages resueltos; install/reinstall
-  OK) y `createrepo_c` está **portado a Termux** (`packages/createrepo-c/`, commit `424533d`,
-  run `31236591563` 8/8). T10/T11 completadas (`0568f9e` y review con 4 MAJOR resueltos:
-  `889eb4e` M1/M2, `af949a1` M3, `e541907` M4).
+  La firma de paquetes GPG quedó **CERRADA** (Fase 1.2, 2026-08-08): el SIGSYS de rpm resuelto
+  con el patch de libpopt (`84a667f` + `a37f14b`, run `31271307345` 9/9), **los 7 RPMs del repo
+  firmados** con `rpm --addsign` en el dispositivo (`rpm -K` → "digests signatures OK") y
+  publicados en gh-pages (`392df86`), dnf5 con `gpgcheck=1 repo_gpgcheck=1` sin errores de
+  firma. El sistema de firma GPG del repo quedó **CERRADO** (Fase 1.1, 2026-08-08): repo
+  firmado y **validado en el dispositivo** con auto-import de la clave (`8509ddb`, `9b01c22`,
+  `1874325`); caché anti-rebuilds en CI (`92eaf7b`, fix `733b9d8`; run `31242682232` 8/8 que
+  pobló la caché). La Fase 2 operativa quedó **CERRADA** (Fase 1.0, 2026-08-07): **dnf5
+  funciona 100% sin errores en el dispositivo** (repo local del plugin y repo remoto GitHub
+  Pages resueltos; install/reinstall OK) y `createrepo_c` está **portado a Termux**
+  (`packages/createrepo-c/`, commit `424533d`, run `31236591563` 8/8). T10/T11 completadas
+  (`0568f9e` y review con 4 MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3, `e541907` M4).
 
 ## Pendiente (no empezado)
 
-- **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, firme `repomd.xml` y
-  publique en gh-pages usando un **secret con la clave privada** de la firma GPG (hoy el deploy
-  y la firma son manuales; el repo ya está firmado, commit `1874325`).
+- **Confirmar instalación real con `gpgcheck=1`** en el dispositivo (test del usuario): dnf5 ya
+  resuelve desde el repo firmado sin errores de firma (Fase 1.2, `392df86`); falta confirmar
+  una instalación real `dnf5 install` con `gpgcheck=1 repo_gpgcheck=1`.
+- **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, **firme los RPMs con
+  `rpm --addsign`** y re-firme `repomd.xml` al publicar nuevos paquetes, usando un **secret con
+  la clave privada** de la firma GPG (hoy el deploy y la firma son manuales; el repo ya está
+  firmado, commits `1874325` + `392df86`).
 - **Ecosistema completo**: más paquetes RPM en el repo — el gran reto de la Fase 2 (los 689+
   paquetes del dispositivo tendrían que pasar por rpmbuild/CI y `scripts/mkrepo.sh` o
   `createrepo_c`).
-- **Firma de paquetes individuales (opcional)**: con el repo firmado, firmar también los RPMs
-  individuales.
 - **T12**: reporte final (formal).
 - **Test del install script**: `scripts/install-dnf-termux.sh` (commit `0568f9e`, reescrito como
   pacman bootstrap: `gh download` + `pacman -U`) — implementado, falta probarlo de extremo a
@@ -622,21 +733,25 @@ ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opc
 
 ## Preguntas de Seguimiento (para el usuario)
 
-- **(a) Deploy + firma automatizados en CI**: el sistema de firma GPG del repo está **CERRADO y
+- **(a) Confirmación de instalación real `gpgcheck=1`**: la firma de paquetes GPG quedó
+  **CERRADA** (Fase 1.2): los 7 RPMs firmados con `rpm --addsign` (`rpm -K` → "digests
+  signatures OK"), repo publicado en gh-pages (`392df86`) y dnf5 resolviendo sin errores de
+  firma — ¿se confirma en el dispositivo una instalación real `dnf5 install` con
+  `gpgcheck=1 repo_gpgcheck=1`?
+- **(b) Deploy + firma automatizados en CI**: el sistema de firma GPG del repo está **CERRADO y
   validado** (repo firmado, commit `1874325`; auto-import de la clave con el patch `0015`,
   `8509ddb`; `termux.repo` con `gpgcheck=1`, `9b01c22`) — ¿se configura el workflow de CI con un
-  **secret con la clave privada** para automatizar deploy + firma de `repodata/` en gh-pages?
-- **(b) Resolución desde REPO (rpmlib)**: **RESUELTO y VERIFICADO** (commit `058d61e`, deps
+  **secret con la clave privada** para automatizar deploy + **re-firma** (`rpm --addsign` de los
+  RPMs + `repomd.xml`) al publicar nuevos paquetes en gh-pages?
+- **(c) Resolución desde REPO (rpmlib)**: **RESUELTO y VERIFICADO** (commit `058d61e`, deps
   versionadas con `flags/epoch/ver/rel`; libsolv resuelve vía SYSTEMSOLVABLE) — install/reinstall
   **OK** desde la URL remota en la Fase 1.0 (ahora además con `gpgcheck=1`).
-- **(c) `createrepo_c`**: **RESUELTO** — portado a Termux (`packages/createrepo-c/`, commit
+- **(d) `createrepo_c`**: **RESUELTO** — portado a Termux (`packages/createrepo-c/`, commit
   `424533d`, run `31236591563` 8/8). Queda elegir si reemplaza a `scripts/mkrepo.sh` como
   generador de `repodata/`.
-- **(d) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el gran
+- **(e) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el gran
   reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
   rpmbuild/`scripts/mkrepo.sh` o `createrepo_c`).
-- **(e) Firma de paquetes individuales (opcional)**: con el repo firmado, ¿se firman también los
-  RPMs individuales?
 - **T12 (reporte final)**: T10 y T11 completadas (`0568f9e` install script; review T11 con 4
   MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3, `e541907` M4) — ¿se continúa con T12 formal y
   el test del install script?
