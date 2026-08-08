@@ -131,9 +131,10 @@ termux_step_post_make_install() {
 		name=Termux RPM Repository (dnf-for-termux)
 		baseurl=https://Leonisaurov.github.io/dnf-for-termux/rpm/
 		enabled=1
-		gpgcheck=0
-		repo_gpgcheck=0
-		# Sin firma GPG por ahora. Cuando se firme el repo, descomentar:
-		# gpgkey=https://Leonisaurov.github.io/dnf-for-termux/rpm/termux-rpm.gpg
+		gpgcheck=1
+		repo_gpgcheck=1
+		gpgkey=https://Leonisaurov.github.io/dnf-for-termux/rpm/termux-rpm.gpg
+		# Repo firmado GPG (clave dnf-for-termux). El auto-import de la gpgkey
+		# lo maneja dnf5 mediante el patch 0015 (librepo: "Bad GPG signature").
 	EOF
 }
