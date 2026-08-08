@@ -37,39 +37,54 @@ xml_esc() {
 now="$(date +%s)"
 
 # parse_evr <evr> : imprime "epoch|version|release". evr puede ser "ver-rel", "ver", "epoch:ver-rel".
+# ver y rel se separan por el ÚLTIMO guion; sin guion rel queda vacío.
 parse_evr() {
-  local evr="$1" epoch="0" ver rel
+  local evr="$1" epoch="0" ver rel=""
   if [[ "$evr" == *:* ]]; then
     epoch="${evr%%:*}"
     evr="${evr#*:}"
   fi
   if [[ "$evr" == *-* ]]; then
-    ver="${evr%%-*}"
-    rel="${evr#*-}"
+    ver="${evr%-*}"
+    rel="${evr##*-}"
   else
     ver="$evr"
-    rel="0"
   fi
   printf '%s|%s|%s' "$epoch" "$ver" "$rel"
 }
 
 # entry_from_dep <linea>: convierte "name [<= | >= | < | > | =] evr" en XML <rpm:entry .../>
+# rpm emite "name op evr" (p.ej. "rpmlib(CompressedFileNames) <= 3.0.4-1"), así que
+# tras separar name, el operador queda al INICIO de rest. Antes se exigía un espacio
+# previo ("* <= *") y nunca matcheaba -> toda dep/provide versionada salía sin flags.
 entry_from_dep() {
   local line="$1" name flags="" rest evr epoch ver rel
   name="${line%% *}"
   rest="${line#* }"
-  if [[ "$rest" == *" <= "* ]]; then flags="LE"; evr="${rest#* <= }"; rest="${rest% <= *}"; fi
-  if [[ "$rest" == *" >= "* ]]; then flags="GE"; evr="${rest#* >= }"; rest="${rest% >= *}"; fi
-  if [[ "$rest" == *" < "* ]]; then flags="LT"; evr="${rest#* < }"; rest="${rest% < *}"; fi
-  if [[ "$rest" == *" > "* ]]; then flags="GT"; evr="${rest#* > }"; rest="${rest% > *}"; fi
-  if [[ "$rest" == *" = "* ]]; then flags="EQ"; evr="${rest#* = }"; rest="${rest% = *}"; fi
+  if [[ "$rest" == "<= "* ]]; then flags="LE"; evr="${rest#<= }"; fi
+  if [[ "$rest" == ">= "* ]]; then flags="GE"; evr="${rest#>= }"; fi
+  if [[ "$rest" == "> "* ]]; then flags="GT"; evr="${rest#> }"; fi
+  if [[ "$rest" == "< "* ]]; then flags="LT"; evr="${rest#< }"; fi
+  if [[ "$rest" == "= "* ]]; then flags="EQ"; evr="${rest#= }"; fi
   if [ -z "$flags" ]; then
     printf '      <rpm:entry name="%s"/>\n' "$(xml_esc "$name")"
     return
   fi
-  read -r epoch ver rel <<<"$(parse_evr "$evr")"
-  printf '      <rpm:entry name="%s" flags="%s" epoch="%s" ver="%s" rel="%s"/>\n' \
-    "$(xml_esc "$name")" "$flags" "$epoch" "$(xml_esc "$ver")" "$(xml_esc "$rel")"
+  # Recorta espacios alrededor del EVR por robustez
+  evr="${evr#"${evr%%[![:space:]]*}"}"
+  evr="${evr%"${evr##*[![:space:]]}"}"
+  IFS='|' read -r epoch ver rel <<<"$(parse_evr "$evr")"
+  if [ -z "$ver" ]; then
+    printf '      <rpm:entry name="%s"/>\n' "$(xml_esc "$name")"
+    return
+  fi
+  if [ -n "$rel" ]; then
+    printf '      <rpm:entry name="%s" flags="%s" epoch="%s" ver="%s" rel="%s"/>\n' \
+      "$(xml_esc "$name")" "$flags" "$epoch" "$(xml_esc "$ver")" "$(xml_esc "$rel")"
+  else
+    printf '      <rpm:entry name="%s" flags="%s" epoch="%s" ver="%s"/>\n' \
+      "$(xml_esc "$name")" "$flags" "$epoch" "$(xml_esc "$ver")"
+  fi
 }
 
 # --- generación de archivos de metadatos ---
