@@ -1,0 +1,24 @@
+From: dnf-for-termux <dev@termux.dev>
+Date: Thu, 06 Aug 2026 00:00:00 -0600
+Subject: [PATCH 1/1] Trigger auto gpgkey import on librepo "Bad GPG signature"
+
+Termux's librepo, when the gpg keyring is empty, reports signature
+verification failures with the generic "Bad GPG signature" message
+(LRE_BADGPG in gpg_gpgme.c) instead of upstream's "Signing key not
+found". The auto-import of the repo gpgkey (RepoPgp::import_key())
+is gated on that upstream message, so repo_gpgcheck=1 fails whenever
+the keyring is empty. Broaden the check so the import also triggers
+when the error message mentions a "Bad GPG signature".
+
+diff --git a/libdnf5/repo/repo_sack.cpp b/libdnf5/repo/repo_sack.cpp
+--- a/libdnf5/repo/repo_sack.cpp
++++ b/libdnf5/repo/repo_sack.cpp
+@@ -334,7 +334,7 @@
+         exception = rd_err;
+         if (report_key_err) {
+             std::string msg = rd_err.what();
+-            if (msg.ends_with("Signing key not found")) {
++            if (msg.ends_with("Signing key not found") || msg.find("Bad GPG signature") != std::string::npos) {
+                 return true;
+             }
+         }
