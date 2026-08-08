@@ -3,8 +3,10 @@
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `scripts/mkrepo.sh`, `git log`,
 `gh run list/view`).
-Fecha del registro: 2026-08-05 (última actualización 2026-08-05, Fase 0.6 — dnf5 validado en
-dispositivo, Fase 0 cerrada; Fase 0.7 — repo RPM local funcional y validado contra dnf5).
+Fecha del registro: 2026-08-07 (última actualización 2026-08-07, Fase 0.9 — repo RPM remoto en
+GitHub Pages operativo y resoluble desde la URL; previas: Fase 0.8 — dnf5 funcional en el
+dispositivo: instala y ejecuta RPMs reales; Fase 0.7 — repo RPM local funcional; Fase 0.6 —
+dnf5 validado en dispositivo).
 
 ## Resumen ejecutivo
 
@@ -26,6 +28,19 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   convertidos on-device con rpmbuild desde los `.pkg`, `AutoReqProv: no`) con `repodata/`
   generada por el nuevo `scripts/mkrepo.sh` (commit `4bfb93e`), y la cadena repo→repoquery fue
   validada contra el dnf5 5.4.2.1 real del dispositivo (ver sección "Fase 0.7").
+  Y después (Fase 0.8, 2026-08-06): **HITO — dnf5 INSTALA y EJECUTA RPMs reales en el
+  dispositivo**. `dnf5 --disablerepo='*' install ./dnf-hello-1.0-1.aarch64.rpm` + ejecución de
+  `dnf-hello` confirmada por el usuario; ciclo completo cerrado de verdad. Se requirió un **rpm
+  4.18.1-2 patcheado** (`termux-rootless-unpack.patch`, commits `ac354d0`, `3c6532b`,
+  `197f036`) horneado en `librpm.so`, validado por el run `31221704266` (7/7 jobs success) e
+  instalado en el dispositivo (ver sección "Fase 0.8").
+  Y después (Fase 0.9, 2026-08-06/07): la **Fase 2 quedó INICIADA** con un **repo RPM remoto
+  OPERATIVO en GitHub Pages** (`https://Leonisaurov.github.io/dnf-for-termux/rpm/`, rama
+  `gh-pages` commit `d14d2fc`, metadatos con sha256 idéntico a la `repodata` local) que dnf5
+  resuelve desde la URL; el fix `058d61e` de `scripts/mkrepo.sh` **resolvió** el
+  `nothing provides rpmlib(...)` (instalaciones desde repo) y `termux.repo` quedó apuntando a la
+  URL real con `gpgcheck=0` + dnf5 REVISION=1 (`52528a6`, rebuild en curso). Firma GPG pospuesta
+  por decisión del usuario (ver sección "Fase 0.9").
 
 ## Stack de paquetes
 
@@ -263,24 +278,141 @@ funciona de extremo a extremo contra el dnf5 real del dispositivo. El mecanismo 
 alimentar dnf5 en Termux queda documentado y validado; la Fase 2 (repo GitHub Pages firmado +
 CI que emita RPMs) tiene ahora su base técnica probada.
 
+## Fase 0.8 — dnf5 funcional en el dispositivo (instala y ejecuta RPMs)
+
+Sesión posterior a la Fase 0.7 (2026-08-06). El paso que quedó pendiente en la Fase 0.7
+(`dnf5 install` real en el dispositivo) se completó. Estado verificado contra `git log`,
+`packages/rpm/`, `.github/workflows/build.yml`, `gh run view 31221704266` y
+`ls $HOME/dnf-pkgs-new4/`.
+
+### ✅ HITO — dnf5 INSTALA y EJECUTA RPMs reales en el dispositivo (2026-08-06)
+
+Confirmado por el usuario en el dispositivo:
+
+```
+dnf5 --disablerepo='*' install ./dnf-hello-1.0-1.aarch64.rpm
+dnf-hello    # ejecuta correctamente el programa instalado
+```
+
+Ciclo completo cerrado de verdad: cross-compilación aarch64 → `.pkg.tar.xz` → `pacman -U` →
+`dnf5 install <archivo .rpm>` → ejecución real del paquete instalado.
+
+### Fixes encadenados (commits)
+
+| Commit | Área | Qué hace |
+|---|---|---|
+| `ac354d0` | dnf5 | patch `0014-termux-bootc-nonfhs.patch`: `bootc::is_writable()` apunta a TERMUX_PREFIX (fix "Failed to stat /usr" en sistema non-FHS) |
+| `3c6532b` | rpm | **nuevo `packages/rpm/`** (rpm 4.18.1-2 patcheado, REVISION=2) con `termux-rootless-unpack.patch`: en `lib/fsm.c` `ensureDir()` re-ancla la caminata en TERMUX_PREFIX cuando `open("/")` falla EACCES por SELinux en Android rootless (evita el EBADF); ruta fuera del prefix → rechazo con `failed to open dir %s: %s` |
+| `197f036` | CI | `build.yml`: añade `rpm` a la matrix (emite artifact `rpm-4.18.1-2-aarch64.pkg.tar.xz`) |
+
+`packages/rpm/` incluye además `errno.patch` y `goto_declaration.patch` (compat bionic) y
+`build.sh` con `LDFLAGS+=" -llua5.4 -landroid-spawn $($CC -print-libgcc-file-name)"`.
+
+### Run CI `31221704266` — 7/7 jobs success
+
+Todos los jobs de la matrix en verde: `validate`, `build (zchunk)`, `build (libcomps)`,
+`build (libsolv)`, `build (librepo)`, **`build (rpm)`** y `build (dnf5)` (todos con
+`Verify AArch64 architecture`).
+
+Artifacts (copiados a `$HOME/dnf-pkgs-new4/`):
+
+- `rpm-4.18.1-2-aarch64.pkg.tar.xz` — rpm **patcheado**: el `termux-rootless-unpack.patch`
+  está **horneado en `librpm.so`** (la cadena `failed to open dir %s: %s` está presente en el
+  binario).
+- `dnf5-5.4.2.1-0-aarch64.pkg.tar.xz` — dnf5 del run.
+
+**Ambos instalados en el dispositivo.** El rpm parcheado es **OBLIGATORIO**: dnf5 enlaza
+`librpm.so` dinámico; el `-I` del CI descarga el rpm oficial de termux-main, ABI-compatible pero
+**sin el patch** (rompería la instalación de RPMs en Android rootless).
+
+### PENDIENTE (Fase 2)
+
+1. **Repo RPM remoto publicable**: GitHub Pages + firma GPG + `termux.repo` con URL real (hoy
+   apunta a `https://packages.termux.dev/rpm/` → 404).
+2. **`createrepo_c`** para el plugin local de dnf5: en CI se puede `apt-get install
+   createrepo-c` en el container Ubuntu; en el dispositivo habría que empaquetarlo.
+3. **Resolución desde REPO**: persiste `nothing provides rpmlib(...)` para instalaciones desde
+   repo; la de archivo directo funciona (el fallback SYSTEMSOLVABLE de libsolv no engrana en
+   nuestro build, pendiente de diagnosticar).
+
+**Conclusión (Fase 0.8)**: el flujo de archivo directo (`dnf5 install ./<pkg>.rpm`) funciona de
+extremo a extremo en el dispositivo → **HITO alcanzado**. La Fase 2 queda definida como: repo
+remoto publicable + resolución por nombre desde repo + `createrepo_c`.
+
+## Fase 0.9 — Repo RPM remoto en GitHub Pages (Fase 2 iniciada)
+
+Sesión posterior a la Fase 0.8 (2026-08-06/07). La Fase 2 (repo RPM remoto publicable) quedó
+**INICIADA** y su primera piedra está **OPERATIVA**: un repo RPM remoto en GitHub Pages que dnf5
+resuelve desde la URL. Estado verificado contra `git log`, la rama `gh-pages` (commit `d14d2fc`),
+`curl` sobre `https://Leonisaurov.github.io/dnf-for-termux/rpm/repomd.xml` (HTTP 200) y las
+pruebas del dispositivo.
+
+### ✅ Repo RPM remoto OPERATIVO (GitHub Pages)
+
+- **URL**: `https://Leonisaurov.github.io/dnf-for-termux/rpm/` (rama `gh-pages`, commit
+  `d14d2fc`; contenido publicado bajo `rpm/`).
+- **Metadatos verificados**: `repomd.xml` responde **200**; los metadatos remotos tienen **sha256
+  idéntico** a la `repodata` local corregida.
+- **dnf5 resuelve desde la URL remota**: `dnf5 repolist`, `dnf5 repoquery` e
+  `dnf5 install --assumeno` desde la URL **OK**. El único fallo anterior era un `$TMPDIR` literal
+  **no expandido** en el config del usuario, no un problema del repo.
+
+### Fixes de la Fase 0.9 (commits)
+
+| Commit | Área | Qué hace |
+|---|---|---|
+| `058d61e` | `scripts/mkrepo.sh` | **fix de `entry_from_dep()`/`parse_evr()`** (operador al inicio de `rest` + EVR por el último guion + `IFS='|'`): las deps versionadas emiten `flags/epoch/ver/rel` → **ARREGLADO el `nothing provides rpmlib(...)`** en instalaciones **desde repo** (libsolv resuelve vía SYSTEMSOLVABLE) |
+| `52528a6` | `termux.repo` + dnf5 | `baseurl=https://Leonisaurov.github.io/dnf-for-termux/rpm/` + `gpgcheck=0` (`gpgkey` comentada) + `TERMUX_PKG_REVISION=1` (dnf5 `5.4.2.1-1`). Rebuild en curso (run por verificar) |
+| `d14d2fc` | rama `gh-pages` | publica el repo RPM remoto bajo `rpm/` en GitHub Pages |
+
+### Firma GPG del repo (pospuesta por decisión del usuario)
+
+- Clave lista: homedir `$HOME/dnf-gpg`, fingerprint
+  `228A7E23748A40F925E7DEECFAAA6809B0971ADC`.
+- La firma de `repomd.xml` es **válida con `gpgv`**, pero `repo_gpgcheck=1` en dnf5 la **rechaza**
+  (librepo no usa el keyring de rpm).
+- Decisión: **`gpgcheck=0` por ahora**; firma GPG **pospuesta** hasta que el usuario la quiera.
+
+### Decisiones del usuario (2026-08-06/07)
+
+- **Hosting**: GitHub Pages (elegido). **Firma**: sin firma por ahora.
+- **Siguiente**: rebuild dnf5 (rev 1) → instalar → test `dnf5 install` desde URL; luego
+  `createrepo_c` (plugin local de dnf5), T10 (install script), T11 (code review), T12 (reporte).
+
+**Conclusión (Fase 0.9)**: la Fase 2 queda **iniciada** con un repo RPM remoto publicable y
+resoluble desde la URL; el bloqueo de resolución desde repo (`nothing provides rpmlib(...)`) está
+**resuelto** (commit `058d61e`) y queda por **verificar tras el rebuild** de dnf5 (`52528a6`).
+
 ## Último estado exacto para retomar
 
-- **Último commit**: `4bfb93e` — "feat(scripts): add mkrepo.sh — RPM repodata generator without
-  createrepo_c (Phase 2 tooling)". Le precede `4269a3b` (docs: PROGRESS.md, Fase 0 cerrada /
-  dnf5 validado). Los fixes de la Fase 0.6 (`c381c0d` CI pacman, `7c5592f` zchunk, `805410d`
-  librepo) quedaron más atrás en la historia.
-- **Últimos runs disparados**: `31065452556` y `31071605356` — **SUCCESS 6/6** en formato
-  pacman (todos los jobs de la matrix: `validate`, `build (zchunk)`, `build (libcomps)`,
-  `build (libsolv)`, `build (librepo)`, `build (dnf5)`). `31071605356` valida los fixes
-  `7c5592f` + `805410d`.
-- **Validación en dispositivo**: COMPLETADA (Fase 0) — dnf5 funciona tras `pacman -U` de los
-  `.pkg` corregidos del run `31071605356` (`$HOME/dnf-pkgs-new2/`), confirmado por el usuario
-  (2026-08-05). Además (Fase 0.7): `dnf5 repoquery --refresh` contra `$HOME/dnf-repo/` devuelve
+- **Último commit**: `52528a6` — `termux.repo` con baseurl real (GitHub Pages) + dnf5
+  REVISION=1 (rebuild en curso, run por verificar). Le preceden los commits de la Fase 0.9:
+  `058d61e` (fix de deps versionadas en `scripts/mkrepo.sh` → resuelto
+  `nothing provides rpmlib(...)`) y `d14d2fc` (rama `gh-pages`, repo publicado bajo `rpm/`). Más
+  atrás en la historia: `197f036` (rpm en matrix), `3c6532b`/`ac354d0` (fixes de la Fase 0.8),
+  `37b5864` (docs: Fase 0.7), `4bfb93e` (mkrepo.sh), `c381c0d`/`7c5592f`/`805410d` (Fase 0.6)
+  y `ad550f0` (fix try-compile, HITO 5/5).
+- **Últimos runs disparados**: el rebuild de la Fase 0.9 (dnf5 `5.4.2.1-1`, commit `52528a6`)
+  está **en curso (run por verificar)**. Último run verificado de referencia: `31221704266` —
+  **SUCCESS 7/7** (Fase 0.8, todos los jobs de la matrix: `validate`, `build (zchunk)`,
+  `build (libcomps)`, `build (libsolv)`, `build (librepo)`, **`build (rpm)`**, `build (dnf5)`;
+  todos con `Verify AArch64`). Runs previos de referencia: `31065452556` y `31071605356`
+  (SUCCESS 6/6, Fase 0.6).
+- **Validación en dispositivo**: COMPLETADA (**HITO Fase 0.8**, 2026-08-06) — el usuario ejecutó
+  `dnf5 --disablerepo='*' install ./dnf-hello-1.0-1.aarch64.rpm` y **`dnf-hello` funciona**:
+  dnf5 instala y ejecuta RPMs reales en el dispositivo. Requiere el **rpm 4.18.1-2 patcheado**
+  (librpm.so con `termux-rootless-unpack.patch`, instalado desde `$HOME/dnf-pkgs-new4/`).
+  Previamente (Fase 0.7): `dnf5 repoquery --refresh` contra `$HOME/dnf-repo/` devuelve
   `dnf-hello-0:1.0-1.aarch64` y `zchunk-0:1.5.3-0`, y `dnf5 repolist` muestra `termux-local`.
-  Pendiente: ejecutar `dnf5 install` en el dispositivo (lo hace el usuario).
-- **Artifacts para el dispositivo**: `.pkg.tar.xz` corregidos en `$HOME/dnf-pkgs-new2/`
-  (`dnf5-5.4.2.1-0`, `libsolv-0.7.39-1`, `librepo-1.20.0-0`, `libcomps-0.1.24-0`,
-  `zchunk-1.5.3-0`); se instalan con `pacman -U`.
+  **Fase 0.9 (2026-08-06/07)**: dnf5 resuelve **desde la URL remota de GitHub Pages**
+  (`dnf5 repolist`/`repoquery`/`install --assumeno` **OK**; el único fallo previo era `$TMPDIR`
+  literal sin expandir en el config del usuario). El `nothing provides rpmlib(...)` quedó
+  **resuelto** (commit `058d61e`) y falta **verificar el install real desde repo** tras el
+  rebuild de dnf5 (rev 1, commit `52528a6`).
+- **Artifacts para el dispositivo**: en `$HOME/dnf-pkgs-new4/` (run `31221704266`):
+  `rpm-4.18.1-2-aarch64.pkg.tar.xz` (parcheado, **obligatorio**) y
+  `dnf5-5.4.2.1-0-aarch64.pkg.tar.xz`; **ambos ya instalados** en el dispositivo con `pacman -U`.
+  Históricos de Fase 0.6 (anteriores) en `$HOME/dnf-pkgs-new2/`.
 - **Formato CI**: pacman (`TERMUX_PACKAGE_FORMAT=pacman` vía `TERMUX_DOCKER_EXEC_EXTRA_ARGS`,
   commit `c381c0d`). El dispositivo usa termux-pacman 7.1.0-6 (root `$PREFIX`, 689+ paquetes).
 - **Archivos de `packages/dnf5/`** (verificado con `ls`):
@@ -290,8 +422,14 @@ CI que emita RPMs) tiene ahora su base técnica probada.
     `0005-termux-binary-prefixes.patch`, `0006-termux-automatic-plugin.patch`,
     `0007-termux-copr-plugin.patch`, `0008-rpm-4.18-compat.patch`, `0009-disable-werror.patch`,
     `0010-disable-needs-restarting.patch`, `0011-missing-includes.patch`,
-    `0012-renameat2-bionic.patch`, `0013-progress-bar-clock.patch`
+    `0012-renameat2-bionic.patch`, `0013-progress-bar-clock.patch`,
+    `0014-termux-bootc-nonfhs.patch`
     (0002 es `.diff` aplicado manualmente en `termux_step_post_get_source` con `|| true`).
+- **`packages/rpm/`** (nuevo, commit `3c6532b`, rpm 4.18.1-2 REVISION=2): `build.sh`,
+  `errno.patch`, `goto_declaration.patch` y `termux-rootless-unpack.patch` (re-ancla
+  `ensureDir()` de `lib/fsm.c` en TERMUX_PREFIX cuando `open("/")` da EACCES por SELinux en
+  Android rootless; ruta fuera del prefix → rechazo `failed to open dir %s: %s`). Se añadió a la
+  matrix del CI (commit `197f036`).
 - **`termux_step_pre_configure` actual** (verificado en `packages/dnf5/build.sh`):
   `LDFLAGS+=" -landroid-glob"` y `-Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11` (toml11
   header-only descargado en `termux_step_post_get_source`). Los overrides
@@ -300,46 +438,59 @@ CI que emita RPMs) tiene ahora su base técnica probada.
 - **`packages/zchunk/build.sh`** añade `termux_step_pre_massage()` (commit `7c5592f`) que
   elimina `argp.h`/`libargp.a` del staging; **`packages/librepo/0003-optional-gpgme.patch`**
   regenerado (commit `805410d`) conserva `GPGME_LIBRARIES` del pkg-config.
-- **`git status --short`**: PROGRESS.md ya está commiteado (docs `1756fbe`, `4269a3b`). Los
+- **`git status --short`**: PROGRESS.md está commiteado en docs previos (`1756fbe`, `4269a3b`,
+  `37b5864`) y en working tree queda modificado con las Fases 0.8 y 0.9 (por commitear). Los
   untracked actuales son los scripts de soporte `up-massage.sh`, `up-start.sh`,
   `up-termux_step_massage.sh`, `up-vars.sh`. `err.log` ya está en `.gitignore` (commit ad550f0).
 - **Próximos pasos (siguiente sesión)**:
-  1. **Validar `dnf5 install`** en el dispositivo (lo ejecuta el usuario): directo
-     `dnf5 install ./dnf-hello-1.0-1.aarch64.rpm` y desde repo `dnf5 install dnf-hello` /
-     `dnf5 install zchunk` con `termux-local.repo`.
-  2. Fase 2 completa: repo **GitHub Pages firmado** (con `scripts/mkrepo.sh`) + CI que emita
-     RPMs (los RPMs on-device de `$HOME/dnf-repo/` sirven de prueba del formato).
-  3. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
-  4. T11: code review de `packages/` y `.github/workflows/build.yml`.
-  5. T12: reporte final.
-  El HITO de la Fase 0 está completo (en formato deb y pacman) y **dnf5 VALIDADO en el
-  dispositivo** (2026-08-05); la pregunta de "iterar dnf5 o pausar" queda RESUELTA (ya no hay
-  que iterar). La Fase 0.7 dejó además un repo RPM local funcional y validado contra dnf5.
+  1. **Verificar el rebuild de dnf5 (rev 1, commit `52528a6`)**: el run está en curso; al
+     terminar, instalar el `.pkg` (dnf5 `5.4.2.1-1`) en el dispositivo y hacer el test final
+     `dnf5 install` **desde la URL remota** de GitHub Pages (el `--assumeno` ya dio OK; falta el
+     install real, que el commit `058d61e` desbloqueó).
+  2. **Fase 2 — `createrepo_c`**: en CI `apt-get install createrepo-c` en el container Ubuntu;
+     en el dispositivo, empaquetarlo (o mantener `scripts/mkrepo.sh`).
+  3. **Fase 2 — firma GPG**: clave lista (`$HOME/dnf-gpg`); la firma de repomd es válida con
+     `gpgv`, pero dnf5 la rechaza con `repo_gpgcheck=1` (librepo no usa el keyring de rpm) → se
+     mantiene `gpgcheck=0` hasta que el usuario la quiera.
+  4. T10: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
+  5. T11: code review de `packages/` y `.github/workflows/build.yml`.
+  6. T12: reporte final.
+  El HITO de la Fase 0.8 está completo y **dnf5 INSTALA y EJECUTA RPMs reales en el dispositivo**
+  (2026-08-06, confirmado por el usuario). La Fase 2 quedó **iniciada** con el repo RPM remoto
+  operativo (Fase 0.9); el resto queda: verificar rebuild/install desde URL, `createrepo_c`,
+  firma GPG (cuando el usuario la quiera) y T10/T11/T12.
 
 ## Pendiente (no empezado)
 
-- **Validar `dnf5 install`** en el dispositivo (dnf-hello y zchunk; directo y vía repo) — lo
-  ejecuta el usuario (próximo paso natural tras la Fase 0.7).
+- **Verificar rebuild de dnf5 (rev 1)** (commit `52528a6`): run en curso; al terminar, instalar
+  el `.pkg` (dnf5 `5.4.2.1-1`) en el dispositivo y test final `dnf5 install` **desde la URL
+  remota** de GitHub Pages (el `--assumeno` ya dio OK; el `nothing provides rpmlib(...)` quedó
+  resuelto con `058d61e`).
+- **Fase 2 — `createrepo_c`** para el plugin local de dnf5: en CI se puede `apt-get install
+  createrepo-c` en el container Ubuntu; en el dispositivo habría que empaquetarlo.
+- **Fase 2 — firma GPG del repo**: clave lista (`$HOME/dnf-gpg`, fingerprint
+  `228A7E23748A40F925E7DEECFAAA6809B0971ADC`); la firma de repomd es válida con `gpgv` pero dnf5
+  la rechaza con `repo_gpgcheck=1` (librepo no usa el keyring de rpm) → se mantiene `gpgcheck=0`
+  hasta que el usuario la quiera.
 - **T10**: `scripts/install-dnf-termux.sh` para instalar los `.pkg` de GitHub Releases.
 - **T11**: code review de `packages/` y `.github/workflows/build.yml`.
 - **T12**: reporte final.
-- **Fase 2**: repo RPM/GitHub Pages **firmado** + CI que emita RPMs (los `.pkg` validados de la
-  Fase 0 y los RPMs on-device de `$HOME/dnf-repo/` son el material de partida).
 
 ## Preguntas de Seguimiento (para el usuario)
 
-- **Fase 2 (repo RPM/GitHub Pages)**: ¿el repo RPM para dnf (`yum.repos.d/termux.repo`) será
-  GitHub Pages de este repo, o se deja el plan para Fase 2? (Con el CI en formato pacman, los
-  artifacts de ese repo serían `.pkg.tar.xz` aarch64; ahora que dnf5 está validado en el
-  dispositivo, estos `.pkg` son publicables.)
-- **(a) Repo local permanente**: ¿crear de forma permanente `termux-local.repo`
-  (`$PREFIX/etc/yum.repos.d/`) apuntando a `$HOME/dnf-repo/`, o esperar a la Fase 2 con GitHub
-  Pages (donde `baseurl` sería `https://.../rpm/`)? Hoy solo existe `termux.repo` (placeholder
-  404 del sistema).
-- **(b) Firmado GPG**: ¿firmar el repo con GPG (`gpgcheck=1`, `gpgkey=`) usando GnuPG 2.5.17
-  disponible en el dispositivo, o mantener `gpgcheck=0` por ahora? El `termux.repo` del sistema
-  ya declara `gpgcheck=1`.
-- **(c) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el
-  gran reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
+- **Rebuild de dnf5 (rev 1)**: el run del commit `52528a6` estaba en curso al cierre de la
+  sesión — ¿resultado SUCCESS y verificación del `dnf5 install` real desde la URL remota de
+  GitHub Pages (el `--assumeno` ya dio OK)?
+- **(a) Firmado GPG**: decidido `gpgcheck=0` por ahora; la clave está lista
+  (`$HOME/dnf-gpg`, fingerprint `228A7E23748A40F925E7DEECFAAA6809B0971ADC`) y la firma de repomd
+  es válida con `gpgv`, pero dnf5 la rechaza con `repo_gpgcheck=1` (librepo no usa el keyring de
+  rpm) — ¿se retoma la firma cuando el usuario la quiera?
+- **(b) Resolución desde REPO (rpmlib)**: **RESUELTO** (commit `058d61e`, deps versionadas con
+  `flags/epoch/ver/rel`; libsolv resuelve vía SYSTEMSOLVABLE) — queda solo por **verificar** tras
+  el rebuild/install real desde URL.
+- **(c) `createrepo_c`**: ¿empaquetarlo para el dispositivo (nuevo `packages/createrepo-c/`) o
+  mantener `scripts/mkrepo.sh` como generador de `repodata/`?
+- **(d) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el gran
+  reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
   rpmbuild/`scripts/mkrepo.sh`).
 - ¿Se continúa con T10 (install script), T11 (code review), T12 (reporte final)?
