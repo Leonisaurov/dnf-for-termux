@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pkg: [zchunk, libcomps, libsolv, librepo, rpm, dnf5]
+        pkg: [zchunk, libcomps, libsolv, librepo, rpm, createrepo-c, dnf5]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
