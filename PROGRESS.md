@@ -3,11 +3,14 @@
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `scripts/mkrepo.sh`, `git log`,
 `gh run list/view`).
-Fecha del registro: 2026-08-07 (última actualización 2026-08-07, Fase 1.0 — dnf5 funcional y
-sin errores en el dispositivo: `createrepo_c` portado a Termux y repo local/remoto resueltos;
-previas: Fase 0.9 — repo RPM remoto en GitHub Pages operativo y resoluble desde la URL; Fase
-0.8 — dnf5 funcional en el dispositivo: instala y ejecuta RPMs reales; Fase 0.7 — repo RPM
-local funcional; Fase 0.6 — dnf5 validado en dispositivo).
+Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.1 — sistema de firma
+GPG del repo implementado y validado en el dispositivo: `termux.repo` con
+`gpgcheck=1 repo_gpgcheck=1`, auto-import de la gpgkey vía patch 0015 y repo firmado en
+gh-pages; previas: Fase 1.0 — dnf5 funcional y sin errores en el dispositivo: `createrepo_c`
+portado a Termux y repo local/remoto resueltos; Fase 0.9 — repo RPM remoto en GitHub Pages
+operativo y resoluble desde la URL; Fase 0.8 — dnf5 funcional en el dispositivo: instala y
+ejecuta RPMs reales; Fase 0.7 — repo RPM local funcional; Fase 0.6 — dnf5 validado en
+dispositivo).
 
 ## Resumen ejecutivo
 
@@ -42,6 +45,14 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   `nothing provides rpmlib(...)` (instalaciones desde repo) y `termux.repo` quedó apuntando a la
   URL real con `gpgcheck=0` + dnf5 REVISION=1 (`52528a6`, rebuild en curso). Firma GPG pospuesta
   por decisión del usuario (ver sección "Fase 0.9").
+  Y después (Fase 1.1, 2026-08-08): el **sistema de firma GPG del repo** quedó **IMPLEMENTADO y
+  VALIDADO en el dispositivo**: `termux.repo` con `gpgcheck=1 repo_gpgcheck=1` (`9b01c22`),
+  `repomd.xml.asc` re-firmado en gh-pages (commit `1874325`), clave pública `termux-rpm.gpg`
+  publicada y auto-import de la gpgkey disparado por el patch `0015` (`8509ddb`, librepo de
+  Termux emite "Bad GPG signature" en vez de "Signing key not found"); **validado en el primer
+  uso**: prompt de importación de la clave → aceptada → instalaciones funcionando vía GPG.
+  Además el CI ganó una **caché anti-rebuilds por hash de inputs** (`92eaf7b`, fix `733b9d8`;
+  run `31242682232` 8/8 que pobló la caché). Firma GPG CERRADA (ver sección "Fase 1.1").
 
 ## Stack de paquetes
 
@@ -446,28 +457,97 @@ install/reinstall OK) y `createrepo_c` queda portado a Termux (puede reemplazar 
 `scripts/mkrepo.sh` como generador de `repodata/` cuando convenga). Pendientes: firma GPG
 (pospuesta), T12 (reporte final) y ecosistema completo (más paquetes RPM en el repo).
 
+## Fase 1.1 — Sistema de firma GPG del repo (validado en dispositivo)
+
+Sesión posterior a la Fase 1.0 (2026-08-08). El **sistema de firma GPG del repo** quedó
+**IMPLEMENTADO y VALIDADO en el dispositivo**: el repo RPM remoto ya no se resuelve con
+`gpgcheck=0`, sino que queda **firmado** y dnf5 valida metadatos y paquetes con auto-import de
+la clave pública. Estado verificado contra `git log`, la rama `gh-pages` (commit `1874325`),
+`packages/dnf5/0015-termux-gpg-import-trigger.patch`, `packages/dnf5/build.sh` (bloque
+`termux.repo`), `.github/workflows/build.yml` (caché por hash de inputs),
+`gh run view 31242682232` y la validación del usuario en el dispositivo.
+
+### ✅ Sistema de firma GPG IMPLEMENTADO y VALIDADO
+
+- **Repo firmado**: `repomd.xml.asc` re-firmado y publicado en gh-pages (commit `1874325`,
+  firma válida "Good signature"); clave pública publicada como `rpm/termux-rpm.gpg` en
+  `https://Leonisaurov.github.io/dnf-for-termux/rpm/termux-rpm.gpg`.
+- **Patch `0015-termux-gpg-import-trigger.patch`** (commit `8509ddb`): dnf5 ahora dispara el
+  auto-import de la `gpgkey` (`RepoPgp::import_key()`) cuando el librepo de Termux emite
+  **"Bad GPG signature"** (antes solo el mensaje upstream "Signing key not found" — mismatch
+  que rompía el import con `repo_gpgcheck=1`). Localizado en `libdnf5/repo/repo_sack.cpp:337`
+  y en librepo `gpg_gpgme.c:294` (`LRE_BADGPG` cuando el keyring está vacío).
+- **`termux.repo`** (commit `9b01c22`): `gpgcheck=1 repo_gpgcheck=1 gpgkey=.../termux-rpm.gpg`
+  (antes `gpgcheck=0` con la `gpgkey` comentada).
+- **VALIDADO EN DISPOSITIVO**: primer uso → **prompt de importación de la clave** → aceptada →
+  **instalaciones funcionando vía GPG**.
+
+### Caché anti-rebuilds (commits `92eaf7b` + fix `733b9d8`)
+
+Hash de inputs por paquete (`build.sh` + patches del paquete y de sus DEPENDS del overlay) →
+`actions/cache@v4`; en **cache-hit se SKIP el build** y el `.pkg` se restaura de la caché como
+artifact (regla del usuario: no recompilar dnf5 sin cambios en sus parches); en cache-miss se
+compila y el `.pkg` se guarda en `/tmp/cached-pkg`. El run `31242682232` (2026-08-08, **SUCCESS
+8/8**) **pobló la caché**; el fix `733b9d8` hace que el paso `Verify AArch64` tolere la
+ausencia de `/tmp/cached-pkg` en cache-miss.
+
+### Diagnóstico técnico del GPG
+
+- Homedir de verificación = `<cachedir>/<repoid>-<hash>/pubring` (librepo `LRO_GNUPGHOMEDIR`).
+- libdnf5 solo auto-importaba la gpgkey con el mensaje upstream **"Signing key not found"**; el
+  librepo de Termux reporta **"Bad GPG signature"** (`gpg_gpgme.c:294`, `LRE_BADGPG`) cuando el
+  keyring está vacío → mismatch que rompía el import con `repo_gpgcheck=1`. El patch 0015
+  amplía el chequeo para disparar el import también con "Bad GPG signature".
+
+### Commits y run de la Fase 1.1
+
+| Commit | Área | Qué hace |
+|---|---|---|
+| `8509ddb` | dnf5 | patch `0015-termux-gpg-import-trigger.patch` (auto-import de gpgkey con "Bad GPG signature") |
+| `9b01c22` | dnf5 | `termux.repo` con `gpgcheck=1 repo_gpgcheck=1 gpgkey=.../termux-rpm.gpg` (repo firmado) |
+| `92eaf7b` | CI | caché por hash de inputs por paquete; cache-hit skipea el build |
+| `733b9d8` | CI | fix del paso `Verify`: tolera la ausencia de `/tmp/cached-pkg` en cache-miss |
+| `1874325` | gh-pages | re-firma `repomd.xml` (firma válida) + publicación de `rpm/termux-rpm.gpg` |
+
+| Run ID | Resultado | Notas |
+|---|---|---|
+| `31242682232` | ✅ SUCCESS 8/8 | todos los jobs con `Verify AArch64`; steps `Cache built package` + `Populate cache` (pobló la caché anti-rebuilds) |
+
+**Conclusión (Fase 1.1)**: el sistema de firma GPG del repo queda **CERRADO** — repo firmado y
+**validado en el dispositivo** con auto-import de la clave (`gpgcheck/repo_gpgcheck=1`).
+Pendientes: automatizar **deploy + firma en CI** (secret con la clave privada), **crecer el
+ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opcional).
+
 ## Último estado exacto para retomar
 
-- **Último commit**: `c8f88e5` — `ci(build): add createrepo-c to matrix` (matrix de 7 paquetes).
-  Le precede `424533d` — port de **createrepo_c 1.2.4** (`packages/createrepo-c/build.sh`),
-  validado por el run `31236591563` (8/8 SUCCESS). Más atrás en la historia reciente:
+- **Último commit**: `733b9d8` — `ci(build): fix Verify step — tolerate missing
+  /tmp/cached-pkg on cache miss` (fix de la caché por hash de inputs, Fase 1.1). Le preceden
+  `92eaf7b` — caché por hash de inputs por paquete (`ci(build): skip rebuilds when package
+  inputs unchanged`), `9b01c22` — `termux.repo` con `gpgcheck=1 repo_gpgcheck=1
+  gpgkey=.../termux-rpm.gpg` (repo firmado), `8509ddb` — patch `0015-termux-gpg-import-trigger`
+  (auto-import de la gpgkey con "Bad GPG signature") y `1874325` (gh-pages) — re-firma de
+  `repomd.xml` + `termux-rpm.gpg` (sistema de firma GPG CERRADO y validado). Más atrás:
+  `4780780` (docs Fase 1.0), `c8f88e5`/`424533d` (createrepo-c en matrix y port),
   `889eb4e`/`af949a1`/`e541907` (review T11: 4 MAJOR resueltos M1/M2/M3/M4), `0568f9e` (install
   script como pacman bootstrap), `52528a6`/`058d61e`/`d14d2fc` (Fase 0.9), `197f036` (rpm en
   matrix), `3c6532b`/`ac354d0` (fixes de la Fase 0.8), `37b5864` (docs: Fase 0.7), `4bfb93e`
   (mkrepo.sh), `c381c0d`/`7c5592f`/`805410d` (Fase 0.6) y `ad550f0` (fix try-compile, HITO 5/5).
-- **Último run verificado**: `31236591563` — **SUCCESS 8/8** (Fase 1.0): `validate` + `build
-  (zchunk)`, `build (libcomps)`, `build (libsolv)`, `build (librepo)`, `build (rpm)`,
-  **`build (createrepo-c)`** y `build (dnf5)`; todos con `Verify AArch64`. Runs previos de
-  referencia: `31221704266` (SUCCESS 7/7, Fase 0.8), `31065452556` y `31071605356` (SUCCESS 6/6,
-  Fase 0.6).
-- **Validación en dispositivo**: COMPLETADA (**Fase 1.0**, 2026-08-07) — **dnf5 100% sin
-  errores**: el `Createrepo_c process exited with code 255` quedó **resuelto con el port de
-  createrepo-c** y el `Curl error (37)` de `_dnf_local_nogpgcheck` quedó **resuelto
+- **Último run verificado**: `31242682232` — **SUCCESS 8/8** (Fase 1.1): todos los jobs de la
+  matrix con `Verify AArch64`, steps `Cache built package` + `Populate cache with built .pkg`
+  (pobló la caché anti-rebuilds por hash de inputs). Runs previos de referencia: `31236591563`
+  (SUCCESS 8/8, Fase 1.0: createrepo-c), `31221704266` (SUCCESS 7/7, Fase 0.8), `31065452556` y
+  `31071605356` (SUCCESS 6/6, Fase 0.6).
+- **Validación en dispositivo**: COMPLETADA (**Fase 1.1**, 2026-08-08) — **sistema de firma GPG
+  del repo VALIDADO**: primer uso → **prompt de importación de la clave** → aceptada →
+  **instalaciones funcionando vía GPG** (`termux.repo` con `gpgcheck=1 repo_gpgcheck=1 gpgkey=
+  .../termux-rpm.gpg`; auto-import vía patch `0015`). Previa (**Fase 1.0**, 2026-08-07) — **dnf5
+  100% sin errores**: el `Createrepo_c process exited with code 255` quedó **resuelto con el
+  port de createrepo-c** y el `Curl error (37)` de `_dnf_local_nogpgcheck` quedó **resuelto
   inicializando el repo local del plugin** (`$PREFIX/var/lib/dnf/plugins/local-nogpgcheck/` con
   `createrepo_c`; el plugin `[createrepo] enabled=true` de
   `$PREFIX/etc/dnf/libdnf5-plugins/local.conf` lo regenera automáticamente). Repo remoto GitHub
-  Pages **operativo**: `termux.repo` → URL real con `gpgcheck=0`, **resolución desde repo OK**
-  (fix `058d61e`) e **install/reinstall OK**. Histórico: **HITO Fase 0.8** (2026-08-06) —
+  Pages **operativo** con `gpgcheck=1`, **resolución desde repo OK** (fix `058d61e`) e
+  **install/reinstall OK**. Histórico: **HITO Fase 0.8** (2026-08-06) —
   `dnf5 --disablerepo='*' install ./dnf-hello-1.0-1.aarch64.rpm` y **`dnf-hello` funciona**
   (requiere el **rpm 4.18.1-2 patcheado**, instalado desde `$HOME/dnf-pkgs-new4/`). Fase 0.7:
   `dnf5 repoquery --refresh` contra `$HOME/dnf-repo/` devuelve `dnf-hello-0:1.0-1.aarch64` y
@@ -486,7 +566,7 @@ install/reinstall OK) y `createrepo_c` queda portado a Termux (puede reemplazar 
     `0007-termux-copr-plugin.patch`, `0008-rpm-4.18-compat.patch`, `0009-disable-werror.patch`,
     `0010-disable-needs-restarting.patch`, `0011-missing-includes.patch`,
     `0012-renameat2-bionic.patch`, `0013-progress-bar-clock.patch`,
-    `0014-termux-bootc-nonfhs.patch`
+    `0014-termux-bootc-nonfhs.patch`, `0015-termux-gpg-import-trigger.patch`
     (0002 es `.diff` aplicado manualmente en `termux_step_post_get_source` con `|| true`).
 - **`packages/rpm/`** (nuevo, commit `3c6532b`, rpm 4.18.1-2 REVISION=2): `build.sh`,
   `errno.patch`, `goto_declaration.patch` y `termux-rootless-unpack.patch` (re-ancla
@@ -506,49 +586,57 @@ install/reinstall OK) y `createrepo_c` queda portado a Termux (puede reemplazar 
   investigación (`up-*.sh`, `err.log`) ya está en `.gitignore` (commit `8f3ef23`, que además
   eliminó los `patches/` legados y scripts rotos).
 - **Próximos pasos (siguiente sesión)**:
-  1. **Firma GPG del repo (opcional, pospuesta)**: clave lista (`$HOME/dnf-gpg`); la firma de
-     repomd es válida con `gpgv`, pero dnf5 la rechaza con `repo_gpgcheck=1` (librepo no usa el
-     keyring de rpm) → se mantiene `gpgcheck=0` hasta que el usuario la quiera.
-  2. **T12: reporte final.**
-  3. **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
+  1. **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, firme `repomd.xml`
+     y publique en gh-pages usando un **secret con la clave privada** de la firma GPG (hoy el
+     deploy y la firma son manuales; el repo ya está firmado, commit `1874325`).
+  2. **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
      RPM en CI; los 689+ paquetes del dispositivo tendrían que pasar por rpmbuild/CI).
-  4. **Test del install script**: probar `scripts/install-dnf-termux.sh` (commit `0568f9e`,
+  3. **T12: reporte formal.**
+  4. **Firma de paquetes individuales (opcional)**: con el repo firmado, firmar también los
+     RPMs individuales.
+  5. **Test del install script**: probar `scripts/install-dnf-termux.sh` (commit `0568f9e`,
      reescrito como pacman bootstrap: `gh download` + `pacman -U`) de extremo a extremo.
-  La Fase 2 operativa quedó **CERRADA**: **dnf5 funciona 100% sin errores en el dispositivo**
-  (2026-08-07, repo local del plugin y repo remoto GitHub Pages resueltos; install/reinstall OK)
-  y `createrepo_c` está **portado a Termux** (`packages/createrepo-c/`, commit `424533d`, run
-  `31236591563` 8/8). T10/T11 completadas (`0568f9e` y review con 4 MAJOR resueltos:
+  El sistema de firma GPG quedó **CERRADO** (Fase 1.1, 2026-08-08): repo firmado y **validado en
+  el dispositivo** con auto-import de la clave (`8509ddb`, `9b01c22`, `1874325`); caché
+  anti-rebuilds en CI (`92eaf7b`, fix `733b9d8`; run `31242682232` 8/8 que pobló la caché). La
+  Fase 2 operativa quedó **CERRADA** (Fase 1.0, 2026-08-07): **dnf5 funciona 100% sin errores en
+  el dispositivo** (repo local del plugin y repo remoto GitHub Pages resueltos; install/reinstall
+  OK) y `createrepo_c` está **portado a Termux** (`packages/createrepo-c/`, commit `424533d`,
+  run `31236591563` 8/8). T10/T11 completadas (`0568f9e` y review con 4 MAJOR resueltos:
   `889eb4e` M1/M2, `af949a1` M3, `e541907` M4).
 
 ## Pendiente (no empezado)
 
-- **Fase 2 — firma GPG del repo**: clave lista (`$HOME/dnf-gpg`, fingerprint
-  `228A7E23748A40F925E7DEECFAAA6809B0971ADC`); la firma de repomd es válida con `gpgv` pero dnf5
-  la rechaza con `repo_gpgcheck=1` (librepo no usa el keyring de rpm) → se mantiene `gpgcheck=0`
-  hasta que el usuario la quiera.
+- **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, firme `repomd.xml` y
+  publique en gh-pages usando un **secret con la clave privada** de la firma GPG (hoy el deploy
+  y la firma son manuales; el repo ya está firmado, commit `1874325`).
 - **Ecosistema completo**: más paquetes RPM en el repo — el gran reto de la Fase 2 (los 689+
   paquetes del dispositivo tendrían que pasar por rpmbuild/CI y `scripts/mkrepo.sh` o
   `createrepo_c`).
-- **T12**: reporte final.
+- **Firma de paquetes individuales (opcional)**: con el repo firmado, firmar también los RPMs
+  individuales.
+- **T12**: reporte final (formal).
 - **Test del install script**: `scripts/install-dnf-termux.sh` (commit `0568f9e`, reescrito como
   pacman bootstrap: `gh download` + `pacman -U`) — implementado, falta probarlo de extremo a
   extremo.
 
 ## Preguntas de Seguimiento (para el usuario)
 
-- **(a) Firmado GPG**: decidido `gpgcheck=0` por ahora; la clave está lista
-  (`$HOME/dnf-gpg`, fingerprint `228A7E23748A40F925E7DEECFAAA6809B0971ADC`) y la firma de repomd
-  es válida con `gpgv`, pero dnf5 la rechaza con `repo_gpgcheck=1` (librepo no usa el keyring de
-  rpm) — ¿se retoma la firma cuando el usuario la quiera?
+- **(a) Deploy + firma automatizados en CI**: el sistema de firma GPG del repo está **CERRADO y
+  validado** (repo firmado, commit `1874325`; auto-import de la clave con el patch `0015`,
+  `8509ddb`; `termux.repo` con `gpgcheck=1`, `9b01c22`) — ¿se configura el workflow de CI con un
+  **secret con la clave privada** para automatizar deploy + firma de `repodata/` en gh-pages?
 - **(b) Resolución desde REPO (rpmlib)**: **RESUELTO y VERIFICADO** (commit `058d61e`, deps
   versionadas con `flags/epoch/ver/rel`; libsolv resuelve vía SYSTEMSOLVABLE) — install/reinstall
-  **OK** desde la URL remota en la Fase 1.0.
+  **OK** desde la URL remota en la Fase 1.0 (ahora además con `gpgcheck=1`).
 - **(c) `createrepo_c`**: **RESUELTO** — portado a Termux (`packages/createrepo-c/`, commit
   `424533d`, run `31236591563` 8/8). Queda elegir si reemplaza a `scripts/mkrepo.sh` como
   generador de `repodata/`.
 - **(d) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el gran
   reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
   rpmbuild/`scripts/mkrepo.sh` o `createrepo_c`).
+- **(e) Firma de paquetes individuales (opcional)**: con el repo firmado, ¿se firman también los
+  RPMs individuales?
 - **T12 (reporte final)**: T10 y T11 completadas (`0568f9e` install script; review T11 con 4
-  MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3, `e541907` M4) — ¿se continúa con T12 y el
-  test del install script?
+  MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3, `e541907` M4) — ¿se continúa con T12 formal y
+  el test del install script?
