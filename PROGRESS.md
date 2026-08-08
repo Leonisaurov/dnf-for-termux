@@ -3,10 +3,19 @@
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `scripts/mkrepo.sh`, `git log`,
 `gh run list/view`).
-Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.2 — firma de paquetes
-GPG CERRADA: el SIGSYS de rpm resuelto con un patch de libpopt, los 7 RPMs del repo firmados
-con `rpm --addsign` en el dispositivo (`rpm -K` → "digests signatures OK"), repomd re-firmado
-y publicado en gh-pages, dnf5 con `gpgcheck=1 repo_gpgcheck=1` sin errores de firma; previas:
+Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.3 — deploy
+automatizado del repo RPM en CI **OPERATIVO**: workflow `deploy.yml` (disparo manual
+`workflow_dispatch`), run `31276974715` SUCCESS (8 rpms convertidos y firmados con la clave
+del secret `RPM_SIGNING_KEY`, "digests signatures OK", `repodata/` + `repomd.xml` firmado
+publicados a gh-pages/rpm/, repo actualizado a `dnf5-5.4.2.1-1`) y **rotación de la clave de
+firma** (la privada anterior `228A7E23...` se perdió con el `uninstall --purge`; clave nueva
+`E4AC7735...` con backup en `$HOME/dnf-for-termux-signing-key.asc`); previa:
+Fase 1.2 — firma de paquetes GPG CERRADA y VALIDADA en el dispositivo: el SIGSYS de rpm
+resuelto con un patch de libpopt, los 7 RPMs del repo firmados con `rpm --addsign` en el
+dispositivo (`rpm -K` → "digests signatures OK"), repomd re-firmado y publicado en gh-pages,
+dnf5 con `gpgcheck=1 repo_gpgcheck=1` sin errores de firma y con la **instalación real
+CONFIRMADA** (dnf5 pide la firma de paquetes y del metadata y ambas verificaciones
+funcionan); previas:
 Fase 1.1 — sistema de firma GPG del repo implementado y validado en el dispositivo:
 `termux.repo` con `gpgcheck=1 repo_gpgcheck=1`, auto-import de la gpgkey vía patch 0015 y repo
 firmado en gh-pages; Fase 1.0 — dnf5 funcional y sin errores en el dispositivo: `createrepo_c`
@@ -68,8 +77,24 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   (9/9). Con libpopt 1.19-4 instalado, `rpm --addsign` funciona en el dispositivo → **los 7
   .rpm del repo firmados** (`rpm -K` → "digests signatures OK"), repodata regenerada, repomd
   re-firmado y publicado en gh-pages (`392df86`, HTTP 200); dnf5 con `gpgcheck=1` +
-  `repo_gpgcheck=1` resuelve sin errores de firma (ver sección "Fase 1.2"). PENDIENTE:
-  confirmar la instalación real `gpgcheck=1` en el dispositivo (test del usuario).
+  `repo_gpgcheck=1` resuelve sin errores de firma y la **instalación real está CONFIRMADA en
+  el dispositivo** (2026-08-08): dnf5 pide la firma de los paquetes (gpgcheck) y la del
+  metadata (repo_gpgcheck) y **ambas verificaciones funcionan** (ver sección "Fase 1.2").
+  Además el instalador/desinstalador quedaron **simétricos** (commits `76c828a`/`cb47ebe`): el
+  bootstrap instala los **8 paquetes** incl. **libpopt** antes de rpm y el uninstall elimina
+  los 8 + config + rpmdb (backup) + caches + staging + clave GPG.
+  Y después (Fase 1.3, 2026-08-08): el **deploy + la re-firma del repo RPM quedaron
+  AUTOMATIZADOS y OPERATIVOS en CI** (workflow `deploy.yml`, disparo manual
+  `workflow_dispatch`): los `.pkg` del último build exitoso de `build.yml` se convierten a
+  `.rpm` (`scripts/pkg2rpm.sh`), se firman con la clave del secret `RPM_SIGNING_KEY`, se
+  genera `repodata/` (`createrepo_c`), se firma `repomd.xml` y se publica a gh-pages/rpm/ —
+  run `31276974715` SUCCESS (8 rpms, 8 "digests signatures OK"; repo actualizado:
+  `dnf5-5.4.2.1-1` reemplaza al `-0` desactualizado). Además la **clave de firma fue rotada**
+  (la privada anterior `228A7E23...` se perdió con el `uninstall --purge`): clave nueva
+  `E4AC7735BD60196E19123DB6247EEE5F6AA25EC9` (mismo UID, sin passphrase) con **backup** en
+  `$HOME/dnf-for-termux-signing-key.asc` y el secret `RPM_SIGNING_KEY` configurado; el
+  dispositivo quedó con el **stack 8/8 reinstalado y operativo** con la clave nueva (ver
+  sección "Fase 1.3").
 
 ## Stack de paquetes
 
@@ -534,14 +559,16 @@ ausencia de `/tmp/cached-pkg` en cache-miss.
 **validado en el dispositivo** con auto-import de la clave (`gpgcheck/repo_gpgcheck=1`).
 Pendientes: automatizar **deploy + firma en CI** (secret con la clave privada), **crecer el
 ecosistema** (más RPMs en el repo) y la **firma de paquetes individuales** (opcional, hoy
-**CERRADA** en la Fase 1.2).
+**CERRADA y VALIDADA** en la Fase 1.2).
 
-## Fase 1.2 — Firma de paquetes GPG (gpgcheck=1 completo, parche libpopt)
+## Fase 1.2 — Firma de paquetes GPG (gpgcheck=1 completo, parche libpopt, validado en dispositivo)
 
 Sesión posterior a la Fase 1.1 (2026-08-08). El paso que quedó **opcional** en la Fase 1.1
-(**firma de paquetes individuales**) quedó **CERRADO**: los **7 RPMs del repo firmados** con
-`rpm --addsign` en el dispositivo. El obstáculo que lo bloqueaba — rpm muriendo con **SIGSYS**
-en Android — quedó **resuelto con un patch de libpopt** (la causa raíz NO era gpg ni rpm).
+(**firma de paquetes individuales**) quedó **CERRADO y VALIDADO en el dispositivo**: los **7
+RPMs del repo firmados** con `rpm --addsign` en el dispositivo y la **instalación real con
+`gpgcheck=1 repo_gpgcheck=1` confirmada** (2026-08-08). El obstáculo que lo bloqueaba — rpm
+muriendo con **SIGSYS** en Android — quedó **resuelto con un patch de libpopt** (la causa raíz
+NO era gpg ni rpm).
 Estado verificado contra `git log`, `packages/libpopt/`, `.github/workflows/build.yml`,
 `gh run view 31271307345`, la rama `gh-pages` (commit `392df86`) y el flujo de firma del
 dispositivo.
@@ -585,8 +612,19 @@ para soltar privilegios antes de `execvp()`, y el **seccomp de Android bloquea
   gpg --detach-sign <repomd.xml>                 # re-firmar repomd.xml
   git push                                       # publicar en gh-pages
   ```
-- **PENDIENTE**: confirmar la **instalación real con `gpgcheck=1`** en el dispositivo (test
-  del usuario).
+- **VALIDADO EN DISPOSITIVO (2026-08-08)**: la **instalación real con `gpgcheck=1` +
+  `repo_gpgcheck=1` quedó CONFIRMADA** — dnf5 pide la firma de los paquetes (gpgcheck) y la
+  del metadata (repo_gpgcheck) y **ambas verificaciones funcionan** (test del usuario).
+
+### ✅ Instalación real VALIDADA en el dispositivo (2026-08-08)
+
+- **CONFIRMADO**: con `termux.repo` en `gpgcheck=1 repo_gpgcheck=1`, una instalación real de
+  `dnf5 install` desde el repo firmado hace que dnf5 **pida la firma de los paquetes
+  (gpgcheck)** y **la firma del metadata (repo_gpgcheck)**, y **ambas verificaciones
+  funcionan** (GPG OK).
+- Con esto el **sistema de firmas GPG completo opera de extremo a extremo en el dispositivo**:
+  metadata firmada (`repomd.xml.asc`, Fase 1.1) + **los 7 paquetes firmados** con
+  `rpm --addsign` (Fase 1.2) + **auto-import de la clave pública** (patch `0015`, Fase 1.1).
 
 ### Commits y run de la Fase 1.2
 
@@ -600,21 +638,110 @@ para soltar privilegios antes de `execvp()`, y el **seccomp de Android bloquea
 |---|---|---|
 | `31271307345` | ✅ SUCCESS 9/9 | todos los jobs de la matrix, incluido `build (libpopt)` con `Verify AArch64` |
 
-**Conclusión (Fase 1.2)**: la **firma de paquetes GPG queda CERRADA** — `rpm --addsign`
-funciona en el dispositivo (patch de libpopt que evita el SIGSYS), los **7 RPMs del repo
-están firmados** y el repo publicado en gh-pages valida con `gpgcheck=1 repo_gpgcheck=1` sin
-errores de firma. Pendientes: **confirmar la instalación real `gpgcheck=1`** en el
-dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + firma en CI) y
-**crecer el ecosistema** (más RPMs en el repo).
+**Conclusión (Fase 1.2)**: la **firma de paquetes GPG queda CERRADA y VALIDADA en el
+dispositivo** — `rpm --addsign` funciona en el dispositivo (patch de libpopt que evita el
+SIGSYS), los **7 RPMs del repo están firmados**, el repo publicado en gh-pages valida con
+`gpgcheck=1 repo_gpgcheck=1` sin errores de firma y la **instalación real está CONFIRMADA**
+(dnf5 pide la firma de paquetes y metadata y ambas verificaciones funcionan). El **sistema de
+firmas GPG completo opera** (metadata + 7 paquetes + auto-import de clave). Pendientes:
+**automatizar la re-firma al publicar nuevos paquetes** (deploy + firma en CI) y **crecer el
+ecosistema** (más RPMs en el repo).
+
+## Fase 1.3 — Deploy automatizado del repo RPM en CI (y rotación de la clave de firma)
+
+Sesión posterior a la Fase 1.2 (2026-08-08). El paso que quedó **pendiente** en la Fase 1.2
+(**automatizar el deploy + la re-firma al publicar nuevos paquetes**) quedó **OPERATIVO**: el
+workflow `deploy.yml` convierte los `.pkg` del último build exitoso de `build.yml` a `.rpm`,
+los firma con la clave del secret `RPM_SIGNING_KEY`, genera `repodata/` con `createrepo_c`,
+firma `repomd.xml` y publica el repo a gh-pages/rpm/. Además la **clave de firma GPG fue
+rotada** (la privada anterior se perdió con el `uninstall --purge`). Estado verificado contra
+`git log`, `.github/workflows/deploy.yml`, `scripts/pkg2rpm.sh`, `gh run view 31276974715`, el
+secret `RPM_SIGNING_KEY`, `$HOME/dnf-for-termux-signing-key.asc` y la reinstalación del
+dispositivo.
+
+### ✅ Deploy automatizado OPERATIVO (workflow `deploy.yml`)
+
+- **Disparo**: manual (`workflow_dispatch`) —
+  https://github.com/Leonisaurov/dnf-for-termux/actions/workflows/deploy.yml .
+- **Pipeline**: convierte los `.pkg` del **último build exitoso** de `build.yml` a `.rpm`
+  (`scripts/pkg2rpm.sh`, rpmbuild con `--target $ARCH`), **firma** los RPMs con la clave del
+  secret `RPM_SIGNING_KEY`, genera `repodata/` con `createrepo_c`, **firma `repomd.xml`** y
+  **publica** a gh-pages/rpm/.
+- **Run `31276974715` — SUCCESS**: **8 rpms** firmados (8 "digests signatures OK"); el repo
+  publicado quedó **actualizado**: `dnf5-5.4.2.1-1` reemplaza al `-0` desactualizado.
+
+### Commits y run de la Fase 1.3
+
+| Commit | Área | Qué hace |
+|---|---|---|
+| `5a4879a` | uninstall | `fix(uninstall)`: fingerprint de la **clave nueva** `E4AC7735...` (el uninstall borra la clave nueva) |
+| `744387a` | scripts | **`pkg2rpm.sh`**: convierte `.pkg.tar.xz` de Termux a `.rpm` aarch64 |
+| `ecb759c` | CI | **`deploy.yml`**: workflow de deploy — convertir, firmar (GPG), generar repodata, publicar repo a gh-pages |
+| `4ec3f23` | scripts | `pkg2rpm.sh`: fallback a `/tmp` cuando `TMPDIR` no está definido (compat runner) |
+| `fa5a369` | scripts | `pkg2rpm.sh`: `--target $ARCH` a rpmbuild (cross-build aarch64 en runner x86_64) |
+| `b41589d` | CI | deploy en runner **arm64** — rpmbuild necesita macros aarch64 nativas (no hay cross en x86_64) |
+| `3ec380c` | CI | firma headless: cmd gpg explícito (batch, no-tty, loopback, sin passphrase) |
+| `4dca530` | CI | escape de macros rpm en el cmd gpg (`%%{...}`) + drop de pinentry loopback |
+| `cd6ce52` | CI | `%__gpg_sign_cmd` definido en `~/.rpmmacros` del runner (las macros se expanden en runtime, no vacías en `--define`) |
+| `09af991` | CI | gpg plano en el cmd de firma (evita `%{__gpg}` duplicado) + diagnósticos de firma |
+| `03c16dc` | CI | ruta absoluta de gpg vía `command -v` en el cmd de firma (el env de rpm sign no hereda PATH) |
+| `3a27f01` | CI | importar la pública en el keyring de rpm local (dbpath) para que `rpm -K` valide las firmas |
+
+| Run ID | Resultado | Notas |
+|---|---|---|
+| `31276974715` | ✅ SUCCESS | deploy `workflow_dispatch`: 8 rpms firmados (8 "digests signatures OK"), `repodata/` + `repomd.xml` firmado publicados a gh-pages/rpm/ |
+
+### ✅ Rotación de la clave de firma (2026-08-08)
+
+- La **privada anterior** (`228A7E23...`, homedir `$HOME/dnf-gpg`, Fase 0.9) se **perdió** con
+  el `uninstall --purge` (borra `$HOME/dnf-gpg`).
+- Clave **nueva**: `E4AC7735BD60196E19123DB6247EEE5F6AA25EC9` — **mismo UID, sin passphrase**.
+- **Backup** en `$HOME/dnf-for-termux-signing-key.asc`.
+- Secret **`RPM_SIGNING_KEY`** configurado en el repo (alimenta el deploy).
+- El dispositivo **reimportó la clave nueva** (dnf5 repoquery OK); el uninstall ahora borra la
+  clave nueva (commit `5a4879a`).
+
+### ✅ Lecciones del deploy (para futuras iteraciones)
+
+- `rpm --addsign` **no hereda PATH** → usar `command -v gpg` (fix `03c16dc`).
+- Macros de firma definidas en **`~/.rpmmacros` del runner** (fix `cd6ce52`).
+- **Importar la pública en el keyring de rpm local** (dbpath) para que `rpm -K` valide las
+  firmas (fix `3a27f01`).
+
+### ✅ Estado final del dispositivo
+
+- El dispositivo quedó con el **stack 8/8 reinstalado y operativo** con la clave nueva.
+
+**Conclusión (Fase 1.3)**: el **deploy + la re-firma quedan AUTOMATIZADOS y OPERATIVOS en CI**
+(workflow `deploy.yml`, run `31276974715` SUCCESS: 8 rpms y "digests signatures OK"; repo
+actualizado a `dnf5-5.4.2.1-1` en gh-pages/rpm/) — ya no es manual. La **clave de firma quedó
+rotada** (nueva `E4AC7735...`) con **backup** y el secret `RPM_SIGNING_KEY` configurado, y el
+dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte formal) y
+**ecosistema completo** (más RPMs en el repo).
 
 ## Último estado exacto para retomar
 
-- **Último commit**: `a37f14b` — `ci(build): add libpopt to matrix` (Fase 1.2). Le preceden
-  `84a667f` — port de libpopt 1.19-4 con `termux-no-elevated-exec-drop.patch` (fix del SIGSYS
-  de rpm: solo suelta privilegios si `getuid()!=geteuid()||getgid()!=getegid()`) y `392df86`
-  (gh-pages) — **publish signed RPM repo (7 packages GPG-signed, repomd re-signed)** (los 7
-  RPMs del repo firmados con `rpm --addsign` en el dispositivo; firma de paquetes GPG
-  CERRADA). Más atrás: `089171c` (uninstall script), `1dfc201` (createrepo-c en el bootstrap),
+- **Último commit**: `3a27f01` — `fix(ci): import pubkey into rpm keyring (local dbpath) so
+  rpm -K validates signatures` (Fase 1.3, último fix del pipeline de deploy). Le preceden los
+  fixes del deploy: `03c16dc` (ruta absoluta de gpg vía `command -v`; el env de firma de rpm
+  no hereda PATH), `09af991` (gpg plano en el cmd de firma + diagnósticos), `cd6ce52`
+  (`%__gpg_sign_cmd` definido en `~/.rpmmacros` del runner), `4dca530` (escape de macros rpm
+  `%%{...}` en el cmd gpg), `3ec380c` (firma headless: batch, no-tty, loopback, sin
+  passphrase), `b41589d` (deploy en runner **arm64**; rpmbuild necesita macros aarch64
+  nativas), `fa5a369`/`4ec3f23` (`pkg2rpm.sh`: `--target $ARCH` y fallback a `/tmp`),
+  `ecb759c` (workflow `deploy.yml`) y `744387a` (`pkg2rpm.sh`); y `5a4879a` — `fix(uninstall)`
+  con el fingerprint de la **clave nueva** `E4AC7735...` (rotación de clave). Más atrás:
+  `cb47ebe` — `fix(uninstall): remove all 8 stack packages incl. libpopt + clean dnf caches
+  and installer staging` (Fase 1.2, desinstalador **simétrico** del instalador). Le preceden
+  `76c828a` — `fix(install): include patched libpopt in the bootstrap
+  stack (8 packages, before rpm)` (instalador actualizado a los **8 paquetes** incl. **libpopt**
+  antes de rpm) y `b3085c0` — `docs(progress)` de la Fase 1.2. Más atrás: `a37f14b` —
+  `ci(build): add libpopt to matrix`, `84a667f` — port de libpopt 1.19-4 con
+  `termux-no-elevated-exec-drop.patch` (fix del SIGSYS de rpm: solo suelta privilegios si
+  `getuid()!=geteuid()||getgid()!=getegid()`) y `392df86` (gh-pages) — **publish signed RPM
+  repo (7 packages GPG-signed, repomd re-signed)** (los 7 RPMs del repo firmados con
+  `rpm --addsign` en el dispositivo; firma de paquetes GPG CERRADA y VALIDADA). Más atrás:
+  `089171c` (uninstall script), `1dfc201` (createrepo-c en el bootstrap),
   `5529481` (docs Fase 1.1), `733b9d8`/`92eaf7b` (caché anti-rebuilds, Fase 1.1),
   `9b01c22`/`8509ddb`/`1874325` (sistema de firma GPG del repo), `4780780` (docs Fase 1.0),
   `c8f88e5`/`424533d` (createrepo-c en matrix y port), `889eb4e`/`af949a1`/`e541907` (review
@@ -622,17 +749,28 @@ dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + f
   `52528a6`/`058d61e`/`d14d2fc` (Fase 0.9), `197f036` (rpm en matrix),
   `3c6532b`/`ac354d0` (fixes de la Fase 0.8), `37b5864` (docs: Fase 0.7), `4bfb93e`
   (mkrepo.sh), `c381c0d`/`7c5592f`/`805410d` (Fase 0.6) y `ad550f0` (fix try-compile, HITO 5/5).
-- **Último run verificado**: `31271307345` — **SUCCESS 9/9** (Fase 1.2): todos los jobs de la
-  matrix, incluido **`build (libpopt)`** con `Verify AArch64` (valida el port que arregla el
-  SIGSYS de rpm). Runs previos de referencia: `31242682232` (SUCCESS 8/8, Fase 1.1: caché
-  anti-rebuilds poblada), `31236591563` (SUCCESS 8/8, Fase 1.0: createrepo-c), `31221704266`
-  (SUCCESS 7/7, Fase 0.8), `31065452556` y `31071605356` (SUCCESS 6/6, Fase 0.6).
-- **Validación en dispositivo**: COMPLETADA (**Fase 1.2**, 2026-08-08) — **firma de paquetes
+- **Último run verificado**: `31276974715` — **SUCCESS** (Fase 1.3, deploy automatizado):
+  8 rpms convertidos y firmados (8 "digests signatures OK"), `repodata/` generada con
+  `createrepo_c`, `repomd.xml` firmado y el repo publicado a gh-pages/rpm/ (`dnf5-5.4.2.1-1`
+  reemplaza al `-0` desactualizado). Run CI previo de referencia: `31271307345` — **SUCCESS
+  9/9** (Fase 1.2): todos los jobs de la matrix, incluido **`build (libpopt)`** con
+  `Verify AArch64` (valida el port que arregla el SIGSYS de rpm). Runs previos de referencia:
+  `31242682232` (SUCCESS 8/8, Fase 1.1: caché anti-rebuilds poblada), `31236591563` (SUCCESS
+  8/8, Fase 1.0: createrepo-c), `31221704266` (SUCCESS 7/7, Fase 0.8), `31065452556` y
+  `31071605356` (SUCCESS 6/6, Fase 0.6).
+- **Validación en dispositivo**: COMPLETADA (**Fase 1.3**, 2026-08-08) — **rotación de clave
+  de firma**: la privada anterior (`228A7E23...`) se perdió con el `uninstall --purge`; la
+  clave **nueva** `E4AC7735BD60196E19123DB6247EEE5F6AA25EC9` quedó **importada en el
+  dispositivo** (dnf5 repoquery OK) y el **stack 8/8 quedó reinstalado y operativo** con la
+  clave nueva. Previa (**Fase 1.2**, 2026-08-08) — **firma de paquetes
   GPG**: libpopt 1.19-4 instalado → **`rpm --addsign` funciona** → **los 7 RPMs del repo
   firmados** (`rpm -K` → "digests signatures OK"), `repodata/` regenerada, `repomd.xml`
   re-firmado y publicado en gh-pages (`392df86`, HTTP 200); dnf5 con
-  `gpgcheck=1 repo_gpgcheck=1` resuelve sin errores de firma. **PENDIENTE**: confirmar la
-  instalación real `gpgcheck=1` (test del usuario). Previa (**Fase 1.1**, 2026-08-08) —
+  `gpgcheck=1 repo_gpgcheck=1` resuelve sin errores de firma y la **instalación real está
+  CONFIRMADA**: dnf5 pide la firma de los paquetes (gpgcheck) y la del metadata
+  (repo_gpgcheck) y **ambas verificaciones funcionan**. El **sistema de firmas GPG completo
+  opera** (metadata + 7 paquetes firmados + auto-import de clave). Previa (**Fase 1.1**,
+  2026-08-08) —
   **sistema de firma GPG del repo VALIDADO**: primer uso → **prompt de importación de la
   clave** → aceptada → **instalaciones funcionando vía GPG** (`termux.repo` con
   `gpgcheck=1 repo_gpgcheck=1 gpgkey=.../termux-rpm.gpg`; auto-import vía patch `0015`). Previa
@@ -676,6 +814,23 @@ dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + f
   SIGSYS de `__NR_setgid` del seccomp; idéntico a upstream en sistemas con setuid real). Añadido
   a la matrix (commit `a37f14b`), run `31271307345` 9/9; **libpopt 1.19-4 instalado en el
   dispositivo** (requisito para `rpm --addsign`).
+- **`scripts/install-dnf-termux.sh` y `scripts/uninstall-dnf-termux.sh` (simétricos)**:
+  - `install-dnf-termux.sh` (commit `76c828a`): bootstrap del stack dnf5 desde los artifacts
+    del CI (formato pacman). Descarga los **8 artifacts** y los instala con `pacman -U
+    --needed` en el orden **libpopt → rpm → (libsolv, librepo, libcomps, zchunk,
+    createrepo-c) → dnf5** — **libpopt va antes de rpm** porque rpm depende de él y debe
+    usarse el artifact **parcheado del SIGSYS** (si no, pacman bajaría el oficial 1.19-3 sin
+    parche). Staging en `$HOME/.cache/dnf-termux-install` (persiste para reinstalación
+    offline con un directorio). Verificación final con `dnf5 --version`.
+  - `uninstall-dnf-termux.sh` (commit `cb47ebe`, espejo del instalador): desinstala los **8
+    paquetes** (dnf5, rpm, libpopt, libsolv, librepo, libcomps, zchunk, createrepo-c) con
+    `pacman -Rdd --noconfirm` (solo los instalados), elimina la config/runtime de
+    dnf5/libdnf5 (`$PREFIX/etc/yum.repos.d`, `$PREFIX/etc/dnf`, `$PREFIX/var/lib/dnf`,
+    `$PREFIX/var/cache/dnf`, staging del instalador, `$HOME/.cache/libdnf5`,
+    `$HOME/.local/state/dnf5.log`), hace **backup de la rpmdb en `$TMPDIR`** y la elimina, y
+    borra la **clave GPG de prueba de `~/.gnupg`**. CONSERVA por defecto `$HOME/dnf-gpg` y
+    los stagings de build; `--purge` los elimina también. Verificación final: ninguno de los
+    8 paquetes sigue instalado.
 - **`termux_step_pre_configure` actual** (verificado en `packages/dnf5/build.sh`):
   `LDFLAGS+=" -landroid-glob"` y `-Dtoml11_DIR=${TERMUX_PKG_TMPDIR}/toml11` (toml11
   header-only descargado en `termux_step_post_get_source`). Los overrides
@@ -689,23 +844,22 @@ dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + f
   investigación (`up-*.sh`, `err.log`) ya está en `.gitignore` (commit `8f3ef23`, que además
   eliminó los `patches/` legados y scripts rotos).
 - **Próximos pasos (siguiente sesión)**:
-  1. **Confirmar la instalación real con `gpgcheck=1`** en el dispositivo: test del usuario de
-     `dnf5 install` desde el repo firmado (los 7 RPMs firmados, `392df86`; el repo ya resuelve
-     sin errores de firma, falta la confirmación de instalación real).
-  2. **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, **firme los RPMs
-     con `rpm --addsign`** y re-firme `repomd.xml` al publicar nuevos paquetes, usando un
-     **secret con la clave privada** de la firma GPG (hoy el deploy y la firma son manuales;
-     repo ya firmado, commits `1874325` + `392df86`).
-  3. **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
+  1. **T12: reporte formal.**
+  2. **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
      RPM en CI; los 689+ paquetes del dispositivo tendrían que pasar por rpmbuild/CI).
-  4. **T12: reporte formal.**
-  5. **Test del install script**: probar `scripts/install-dnf-termux.sh` (commit `0568f9e`,
-     reescrito como pacman bootstrap: `gh download` + `pacman -U`) de extremo a extremo.
-  La firma de paquetes GPG quedó **CERRADA** (Fase 1.2, 2026-08-08): el SIGSYS de rpm resuelto
-  con el patch de libpopt (`84a667f` + `a37f14b`, run `31271307345` 9/9), **los 7 RPMs del repo
-  firmados** con `rpm --addsign` en el dispositivo (`rpm -K` → "digests signatures OK") y
-  publicados en gh-pages (`392df86`), dnf5 con `gpgcheck=1 repo_gpgcheck=1` sin errores de
-  firma. El sistema de firma GPG del repo quedó **CERRADO** (Fase 1.1, 2026-08-08): repo
+  El **deploy + la re-firma automatizados en CI** quedó **RESUELTO** (Fase 1.3, 2026-08-08):
+  workflow `deploy.yml` operativo (run `31276974715` SUCCESS: 8 rpms, "digests signatures
+  OK"), secret `RPM_SIGNING_KEY` configurado y repo publicado a gh-pages/rpm/ con
+  `dnf5-5.4.2.1-1`. El **test del install/uninstall script** quedó **ejercitado de extremo a
+  extremo** al reinstalar el stack **8/8** con la clave nueva (rotación de clave, Fase 1.3); el
+  dispositivo quedó operativo.
+  La firma de paquetes GPG quedó **CERRADA y VALIDADA** (Fase 1.2, 2026-08-08): el SIGSYS de
+  rpm resuelto con el patch de libpopt (`84a667f` + `a37f14b`, run `31271307345` 9/9), **los 7
+  RPMs del repo firmados** con `rpm --addsign` en el dispositivo (`rpm -K` → "digests
+  signatures OK") y publicados en gh-pages (`392df86`), dnf5 con `gpgcheck=1 repo_gpgcheck=1`
+  sin errores de firma y con la **instalación real CONFIRMADA** (dnf5 pide la firma de
+  paquetes y metadata; ambas verificaciones funcionan). El sistema de firma GPG del repo quedó
+  **CERRADO** (Fase 1.1, 2026-08-08): repo
   firmado y **validado en el dispositivo** con auto-import de la clave (`8509ddb`, `9b01c22`,
   `1874325`); caché anti-rebuilds en CI (`92eaf7b`, fix `733b9d8`; run `31242682232` 8/8 que
   pobló la caché). La Fase 2 operativa quedó **CERRADA** (Fase 1.0, 2026-08-07): **dnf5
@@ -716,33 +870,35 @@ dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + f
 
 ## Pendiente (no empezado)
 
-- **Confirmar instalación real con `gpgcheck=1`** en el dispositivo (test del usuario): dnf5 ya
-  resuelve desde el repo firmado sin errores de firma (Fase 1.2, `392df86`); falta confirmar
-  una instalación real `dnf5 install` con `gpgcheck=1 repo_gpgcheck=1`.
-- **Automatizar deploy + firma en CI**: workflow que regenere `repodata/`, **firme los RPMs con
-  `rpm --addsign`** y re-firme `repomd.xml` al publicar nuevos paquetes, usando un **secret con
-  la clave privada** de la firma GPG (hoy el deploy y la firma son manuales; el repo ya está
-  firmado, commits `1874325` + `392df86`).
+- **T12**: reporte final (formal) — siguiente paso (la Fase 1.3 quedó cerrada y validada).
 - **Ecosistema completo**: más paquetes RPM en el repo — el gran reto de la Fase 2 (los 689+
   paquetes del dispositivo tendrían que pasar por rpmbuild/CI y `scripts/mkrepo.sh` o
   `createrepo_c`).
-- **T12**: reporte final (formal).
-- **Test del install script**: `scripts/install-dnf-termux.sh` (commit `0568f9e`, reescrito como
-  pacman bootstrap: `gh download` + `pacman -U`) — implementado, falta probarlo de extremo a
-  extremo.
+- **Automatizar la re-firma al añadir paquetes (deploy + firma en CI)**: **RESUELTO**
+  (Fase 1.3, 2026-08-08) — workflow `deploy.yml` operativo: convierte los `.pkg` a `.rpm`,
+  firma con el secret `RPM_SIGNING_KEY`, genera `repodata/` (`createrepo_c`), firma
+  `repomd.xml` y publica a gh-pages/rpm/ (run `31276974715` SUCCESS: 8 rpms, "digests
+  signatures OK").
+- **Test del install/uninstall script**: **ejercitado de extremo a extremo** en la
+  reinstalación del stack **8/8** con la clave nueva (rotación de clave, Fase 1.3, 2026-08-08)
+  — el dispositivo quedó con el stack reinstalado y operativo.
 
 ## Preguntas de Seguimiento (para el usuario)
 
-- **(a) Confirmación de instalación real `gpgcheck=1`**: la firma de paquetes GPG quedó
-  **CERRADA** (Fase 1.2): los 7 RPMs firmados con `rpm --addsign` (`rpm -K` → "digests
-  signatures OK"), repo publicado en gh-pages (`392df86`) y dnf5 resolviendo sin errores de
-  firma — ¿se confirma en el dispositivo una instalación real `dnf5 install` con
-  `gpgcheck=1 repo_gpgcheck=1`?
-- **(b) Deploy + firma automatizados en CI**: el sistema de firma GPG del repo está **CERRADO y
-  validado** (repo firmado, commit `1874325`; auto-import de la clave con el patch `0015`,
-  `8509ddb`; `termux.repo` con `gpgcheck=1`, `9b01c22`) — ¿se configura el workflow de CI con un
-  **secret con la clave privada** para automatizar deploy + **re-firma** (`rpm --addsign` de los
-  RPMs + `repomd.xml`) al publicar nuevos paquetes en gh-pages?
+- **(a) Confirmación de instalación real `gpgcheck=1`**: **RESUELTO/CONFIRMADO (2026-08-08)** —
+  la instalación real con `gpgcheck=1 repo_gpgcheck=1` quedó **validada en el dispositivo**:
+  dnf5 **pide la firma de los paquetes (gpgcheck)** y **la firma del metadata
+  (repo_gpgcheck)** y **ambas verificaciones funcionan** (los 7 RPMs firmados con
+  `rpm --addsign`, `rpm -K` → "digests signatures OK"; repo publicado en gh-pages,
+  `392df86`). El sistema de firmas GPG completo opera (metadata + 7 paquetes + auto-import de
+  clave).
+- **(b) Deploy + firma automatizados en CI**: **RESUELTO (2026-08-08, Fase 1.3)** — el workflow
+  `deploy.yml` quedó **operativo** (disparo manual `workflow_dispatch`,
+  https://github.com/Leonisaurov/dnf-for-termux/actions/workflows/deploy.yml): convierte los
+  `.pkg` del último build exitoso a `.rpm` (`scripts/pkg2rpm.sh`), firma con la clave del
+  **secret `RPM_SIGNING_KEY`**, genera `repodata/` (`createrepo_c`), firma `repomd.xml` y
+  publica a gh-pages/rpm/ — run `31276974715` SUCCESS (8 rpms, "digests signatures OK"; repo
+  actualizado: `dnf5-5.4.2.1-1`). Ya no es manual.
 - **(c) Resolución desde REPO (rpmlib)**: **RESUELTO y VERIFICADO** (commit `058d61e`, deps
   versionadas con `flags/epoch/ver/rel`; libsolv resuelve vía SYSTEMSOLVABLE) — install/reinstall
   **OK** desde la URL remota en la Fase 1.0 (ahora además con `gpgcheck=1`).
@@ -752,6 +908,9 @@ dispositivo, **automatizar la re-firma al publicar nuevos paquetes** (deploy + f
 - **(e) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el gran
   reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
   rpmbuild/`scripts/mkrepo.sh` o `createrepo_c`).
-- **T12 (reporte final)**: T10 y T11 completadas (`0568f9e` install script; review T11 con 4
-  MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3, `e541907` M4) — ¿se continúa con T12 formal y
-  el test del install script?
+- **T12 (reporte final)**: T10 y T11 completadas (install `76c828a` y uninstall `cb47ebe`
+  **simétricos**; review T11 con 4 MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3,
+  `e541907` M4), la **Fase 1.2 cerrada y validada en dispositivo** (gpgcheck/repo_gpgcheck
+  confirmados), la **Fase 1.3 cerrada** (deploy automatizado + rotación de clave) y el
+  install/uninstall **ejercitado de extremo a extremo** en la reinstalación 8/8 — ¿se continúa
+  con T12 formal y el ecosistema completo?
