@@ -19,7 +19,9 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-24.04
+    # Runner ARM64 nativo: el rpm es aarch64 y rpmbuild en x86_64 no tiene las
+    # macros de platform de aarch64 ("No compatible architectures found").
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: write
     steps:
