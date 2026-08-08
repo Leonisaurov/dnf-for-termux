@@ -5,6 +5,7 @@ TERMUX_PKG_MAINTAINER="@termux"
 TERMUX_PKG_VERSION=5.4.2.1
 TERMUX_PKG_SRCURL=https://github.com/rpm-software-management/dnf5/archive/refs/tags/${TERMUX_PKG_VERSION}.tar.gz
 TERMUX_PKG_SHA256=6b3f23275a99c66c4b416d4d312f22da779e90f29c881be73eabfc459fca4fef
+TERMUX_PKG_REVISION=1
 TERMUX_PKG_DEPENDS="rpm, libsolv, librepo, libcomps, zchunk, libsqlite, json-c, fmt, glib, libxml2, zstd, liblzma, openssl, zlib, libsmartcols, libandroid-glob"
 TERMUX_PKG_BUILD_DEPENDS="libcurl"
 TERMUX_PKG_EXTRA_CONFIGURE_ARGS="
@@ -120,13 +121,14 @@ termux_step_post_make_install() {
 	EOF
 
 	cat > "$TERMUX_PKG_MASSAGEDIR$TERMUX_PREFIX/etc/yum.repos.d/termux.repo" <<-EOF
-		# termux.repo - Repositorio base Termux para DNF
+		# termux.repo - Repositorio RPM de dnf-for-termux en GitHub Pages
 		[termux]
-		name=Termux RPM Repository
-		baseurl=https://packages.termux.dev/rpm/
+		name=Termux RPM Repository (dnf-for-termux)
+		baseurl=https://Leonisaurov.github.io/dnf-for-termux/rpm/
 		enabled=1
-		gpgcheck=1
+		gpgcheck=0
 		repo_gpgcheck=0
-		gpgkey=https://packages.termux.dev/rpm/termux-rpm.gpg
+		# Sin firma GPG por ahora. Cuando se firme el repo, descomentar:
+		# gpgkey=https://Leonisaurov.github.io/dnf-for-termux/rpm/termux-rpm.gpg
 	EOF
 }
