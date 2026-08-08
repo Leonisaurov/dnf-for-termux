@@ -1,0 +1,100 @@
+# ============================================================================
+# deploy — publica el repositorio RPM firmado (dnf-for-termux) en GitHub Pages
+# ============================================================================
+# Convierte los .pkg.tar.xz del último build exitoso de build.yml (o de un run
+# dado) a .rpm aarch64 (scripts/pkg2rpm.sh), los firma con la clave GPG
+# (secreto RPM_SIGNING_KEY), genera repodata/ (createrepo_c), firma repomd.xml
+# y publica todo en la rama gh-pages bajo rpm/.
+# ============================================================================
+
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'Run number de build.yml a publicar (vacío = último exitoso)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # 1. Checkout del repo (necesario para scripts/pkg2rpm.sh)
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # 2. Resolver el run de build.yml a usar:
+      #    - si el input 'run' viene dado, se usa ese;
+      #    - si no, se toma el último run exitoso de build.yml.
+      - name: Resolver run de build.yml
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -n "${{ github.event.inputs.run }}" ]; then
+            echo "id=${{ github.event.inputs.run }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "id=$(gh run list --workflow=build.yml --status success --limit 1 --json databaseId -q '.[0].databaseId')" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 3. Descargar los artifacts .pkg.tar.xz del run resuelto
+      - name: Descargar artifacts del run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "${{ steps.run.outputs.id }}" -D /tmp/pkgs
+
+      # 4. Instalar herramientas RPM:
+      #    - rpm: incluye rpmbuild en Ubuntu (verificado: /usr/bin/rpmbuild
+      #      viene en el paquete rpm de Ubuntu/Debian; rpm-common es su
+      #      dependencia y se instala automáticamente).
+      #    - createrepo-c: genera repodata/.
+      - name: Instalar herramientas (rpm, createrepo-c)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm createrepo-c
+
+      # 5. Importar la clave de firma GPG. Sin la clave no se puede firmar
+      #    nada: se aborta con un error claro.
+      - name: Importar clave de firma (RPM_SIGNING_KEY)
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+        run: |
+          if [ -z "$RPM_SIGNING_KEY" ]; then
+            echo "::error::RPM_SIGNING_KEY no está configurado — set the RPM_SIGNING_KEY secret"
+            exit 1
+          fi
+          echo "$RPM_SIGNING_KEY" | gpg --batch --import
+
+      # 6. Convertir .pkg -> .rpm, firmar, generar repodata y firmar el repo
+      - name: Convertir, firmar y generar repodata
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rpm-repo
+          # Cada artifact de build.yml es un directorio con su .pkg.tar.xz
+          for d in /tmp/pkgs/*/; do
+            pkg=$(find "$d" -name '*.pkg.tar.*' | head -1)
+            [ -z "$pkg" ] && continue
+            bash scripts/pkg2rpm.sh "$pkg" /tmp/rpm-repo
+          done
+          ls /tmp/rpm-repo/*.rpm | wc -l            # esperado 8
+          # Firmar todos los RPM con la clave "dnf-for-termux" (UID de la clave)
+          rpm --addsign --define "_gpg_name dnf-for-termux" /tmp/rpm-repo/*.rpm
+          rpm -K /tmp/rpm-repo/*.rpm | grep -c 'signatures OK'   # esperado 8
+          # Metadatos del repo y firma del repomd.xml
+          createrepo_c /tmp/rpm-repo
+          gpg --batch --detach-sign --armor /tmp/rpm-repo/repodata/repomd.xml
+          # Clave pública para que dnf5 valide las firmas
+          gpg --export --armor > /tmp/rpm-repo/termux-rpm.gpg
+
+      # 7. Publicar el repo RPM en la rama gh-pages bajo rpm/
+      - name: Publicar en gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: /tmp/rpm-repo
+          publish_branch: gh-pages
+          destination_dir: rpm
