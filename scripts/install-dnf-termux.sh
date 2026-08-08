@@ -6,8 +6,8 @@
 # (.pkg.tar.xz) y sube un artifact "<paquete>-aarch64" (zip con el .pkg dentro).
 # Este script:
 #   1. localiza el último run EXITOSO de build.yml en main (vía gh)
-#   2. descarga los 7 artifacts a un staging (gh run download)
-#   3. instala los .pkg con `pacman -U --needed` (rpm primero, dnf5 último)
+#   2. descarga los 8 artifacts a un staging (gh run download)
+#   3. instala los .pkg con `pacman -U --needed` (libpopt primero, dnf5 último)
 #   4. verifica con `dnf5 --version`
 #
 # Uso:
@@ -28,10 +28,11 @@ set -euo pipefail
 WORKFLOW="build.yml"          # workflow de CI que compila los paquetes
 BRANCH="main"                 # rama del run a usar
 # Artifacts subidos por la matrix de build.yml (uno por paquete).
-ARTIFACTS=(dnf5-aarch64 rpm-aarch64 libsolv-aarch64 librepo-aarch64 libcomps-aarch64 zchunk-aarch64 createrepo-c-aarch64)
-# Orden de instalación: rpm primero (dnf5 lo necesita en runtime) y dnf5 último;
-# el resto de dependencias en medio (pacman resuelve el orden de todas formas).
-INSTALL_ORDER=(rpm libsolv librepo libcomps zchunk createrepo-c dnf5)
+ARTIFACTS=(dnf5-aarch64 rpm-aarch64 libpopt-aarch64 libsolv-aarch64 librepo-aarch64 libcomps-aarch64 zchunk-aarch64 createrepo-c-aarch64)
+# Orden de instalación: libpopt antes que rpm (rpm depende de libpopt y el
+# artifact es el PARCHADO del SIGSYS; si no, pacman bajaría el oficial 1.19-3
+# sin parche del repo) y dnf5 último; el resto de dependencias en medio.
+INSTALL_ORDER=(libpopt rpm libsolv librepo libcomps zchunk createrepo-c dnf5)
 # Staging bajo $HOME/.cache para que los .pkg persistan entre reinicios y se
 # puedan reinstalar en modo offline sin volver a descargar.
 STAGING="${HOME}/.cache/dnf-termux-install"
@@ -46,7 +47,7 @@ Uso: install-dnf-termux.sh [--assume-yes] [--help] [dir_con_pkgs]
 Instala el stack dnf5 en Termux desde los artifacts del CI (formato pacman).
 
 Sin argumentos:
-    Descarga los 7 .pkg del último run exitoso de build.yml en main y los
+    Descarga los 8 .pkg del último run exitoso de build.yml en main y los
     instala con: pacman -U --needed <paquetes>
 
 Con un directorio:
@@ -63,22 +64,23 @@ Ejemplos:
 EOF
 }
 
-# Ordena una lista de .pkg (una por línea en stdin): rpm primero, dnf5 último
-# y el resto en orden alfabético. Los nombres siguen el patrón pacman:
+# Ordena una lista de .pkg (una por línea en stdin): libpopt primero (dep de
+# rpm, parcheado contra SIGSYS), después rpm, dnf5 último y el resto en orden
+# alfabético. Los nombres siguen el patrón pacman:
 # <paquete>-<version>-aarch64.pkg.tar.xz
 order_pkgs() {
-  local -a ordered=() later=()
+  local -a pre=() mid=() later=()
   local p b
   while IFS= read -r p; do
     b="$(basename "$p")"
     case "$b" in
-      rpm-* | rpm.*) ordered=( "$p" "${ordered[@]}" ) ;;   # rpm al frente
+      libpopt-* | libpopt.*) pre+=( "$p" ) ;;              # libpopt al frente
+      rpm-* | rpm.*) mid+=( "$p" ) ;;                      # rpm a continuación
       dnf5-* | dnf5.*) later+=( "$p" ) ;;                  # dnf5 al final
-      *) ordered+=( "$p" ) ;;
+      *) mid+=( "$p" ) ;;
     esac
   done
-  ordered+=( "${later[@]}" )
-  printf '%s\n' "${ordered[@]}"
+  printf '%s\n' "${pre[@]}" "${mid[@]}" "${later[@]}"
 }
 
 # Valida el entorno: Termux, arquitectura aarch64 y pacman disponible.
@@ -97,7 +99,7 @@ check_env() {
   fi
 }
 
-# Descarga los 7 artifacts del último run exitoso de build.yml a $STAGING.
+# Descarga los 8 artifacts del último run exitoso de build.yml a $STAGING.
 download_pkgs() {
   if ! command -v gh >/dev/null 2>&1; then
     echo "error: 'gh' no está instalado (pkg install gh)." >&2
