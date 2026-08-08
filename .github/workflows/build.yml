@@ -11,6 +11,9 @@
 # (build-package.sh es idempotente: no recompila si el paquete ya existe).
 # Formato de salida: pacman (TERMUX_PACKAGE_FORMAT=pacman inyectado al container
 # vía TERMUX_DOCKER_EXEC_EXTRA_ARGS, que run-docker.sh pasa a 'docker exec').
+# Caché por input: hash de build.sh + patches del paquete (y de sus DEPENDS del
+# overlay). En cache-hit se SKIP el build y el .pkg se restaura de la caché como
+# artifact; en cache-miss se compila y el .pkg se guarda en /tmp/cached-pkg.
 # ============================================================================
 
 name: build
@@ -61,7 +64,34 @@ jobs:
           # Diagnóstico: confirmar la línea quedó no-fatal (debe terminar en || true)
           grep -n "c++/v1" "$GITHUB_WORKSPACE/termux-packages/scripts/build/toolchain/termux_setup_toolchain_29.sh" | head -3 || true
 
+      - name: Compute input hash for ${{ matrix.pkg }}
+        id: hash
+        run: |
+          set -e
+          PKG="${{ matrix.pkg }}"
+          # nullglob: si no hay patches el glob queda vacío y 'cat' no falla
+          # bajo set -e -o pipefail (p.ej. createrepo-c no tiene .patch/.diff).
+          shopt -s nullglob
+          # Hash del input del paquete: build.sh + todos sus patches (.patch y .diff).
+          HASH=$(cat "packages/$PKG/build.sh" packages/$PKG/*.patch packages/$PKG/*.diff | sha256sum | cut -d' ' -f1)
+          # Incluye los inputs (build.sh + patches) de las DEPENDS del paquete
+          # que existan en el overlay packages/.
+          for dep in $(grep -oP 'TERMUX_PKG_(BUILD_)?DEPENDS="\K[^"]+' "packages/$PKG/build.sh" 2>/dev/null | tr ',' '\n' | tr -d ' ' | sort -u); do
+            if [ -f "packages/$dep/build.sh" ]; then
+              HASH="$HASH $(cat packages/$dep/build.sh packages/$dep/*.patch packages/$dep/*.diff 2>/dev/null | sha256sum | cut -d' ' -f1)"
+            fi
+          done
+          echo "hash=$(echo "$HASH" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache built package
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/cached-pkg
+          key: ${{ matrix.pkg }}-${{ steps.hash.outputs.hash }}
+
       - name: Build ${{ matrix.pkg }} (aarch64)
+        if: steps.cache.outputs.cache-hit != 'true'
         working-directory: ${{ github.workspace }}/termux-packages
         run: |
           if [ "${{ matrix.pkg }}" = "dnf5" ]; then
@@ -78,7 +108,9 @@ jobs:
       - name: Verify AArch64 architecture
         run: |
           set -e
-          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" -name '*.pkg.tar.*' 2>/dev/null)
+          # Busca también en /tmp/cached-pkg: en cache-hit el .pkg viene de la caché
+          # (el build se skipea) y queremos verificar igualmente el .pkg restaurado.
+          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" /tmp/cached-pkg -name '*.pkg.tar.*' 2>/dev/null)
           if [ -z "$PKGS" ]; then echo "❌ No .pkg.tar.* found"; exit 1; fi
           NON_ARCH=0
           for PKG in $PKGS; do
@@ -98,17 +130,39 @@ jobs:
           done
           exit $NON_ARCH
 
+      - name: Populate cache with built .pkg
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p /tmp/cached-pkg
+          # Nombre pacman: <pkgname>-<version>-<arch>.pkg.tar.xz (separador '-',
+          # ver termux_step_create_pacman_package.sh). El prefijo [0-9] evita
+          # capturar subpaquetes con sufijo (p.ej. zchunk-static-... o el
+          # libsolv compilado extra en el job de dnf5). actions/cache@v4 guarda
+          # /tmp/cached-pkg automáticamente al final del job en cache-miss.
+          PKG_FILE=$(find "$GITHUB_WORKSPACE/termux-packages" -name "${{ matrix.pkg }}-[0-9]*.pkg.tar.*" | head -1)
+          if [ -z "$PKG_FILE" ]; then echo "❌ No ${{ matrix.pkg }}-[0-9]*.pkg.tar.* found to cache"; exit 1; fi
+          cp "$PKG_FILE" /tmp/cached-pkg/
+          echo "Cached: $PKG_FILE"
+
       - name: Stage .pkg.tar.xz artifact
         run: |
           set -e
           mkdir -p /tmp/artifacts
-          # Nombre pacman: <pkgname>-<version>-<arch>.pkg.tar.xz (separador '-',
-          # ver termux_step_create_pacman_package.sh). El prefijo [0-9] tras el
-          # nombre del paquete evita capturar subpaquetes con sufijo (p.ej.
-          # zchunk-static-... o libsolv-... en el job de dnf5).
-          PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" -name "${{ matrix.pkg }}-[0-9]*.pkg.tar.*" 2>/dev/null)
-          if [ -z "$PKGS" ]; then echo "❌ No ${{ matrix.pkg }}-[0-9]*.pkg.tar.* found to stage"; exit 1; fi
-          cp $PKGS /tmp/artifacts/
+          # En cache-hit el .pkg viene de /tmp/cached-pkg (restaurado por actions/cache);
+          # en cache-miss lo deja el step "Populate cache". El else es fallback de seguridad.
+          if ls /tmp/cached-pkg/*.pkg.tar.* >/dev/null 2>&1; then
+            echo "Staging .pkg from cache: $(ls /tmp/cached-pkg/*.pkg.tar.*)"
+            cp /tmp/cached-pkg/*.pkg.tar.* /tmp/artifacts/
+          else
+            # Nombre pacman: <pkgname>-<version>-<arch>.pkg.tar.xz (separador '-',
+            # ver termux_step_create_pacman_package.sh). El prefijo [0-9] tras el
+            # nombre del paquete evita capturar subpaquetes con sufijo (p.ej.
+            # zchunk-static-... o libsolv-... en el job de dnf5).
+            PKGS=$(find "$GITHUB_WORKSPACE/termux-packages" -name "${{ matrix.pkg }}-[0-9]*.pkg.tar.*" 2>/dev/null)
+            if [ -z "$PKGS" ]; then echo "❌ No ${{ matrix.pkg }}-[0-9]*.pkg.tar.* found to stage"; exit 1; fi
+            cp $PKGS /tmp/artifacts/
+          fi
 
       - name: Upload .pkg.tar.xz artifact
         uses: actions/upload-artifact@v4
