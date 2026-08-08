@@ -137,7 +137,7 @@ backup_remove_rpmdb() {
 
 # Elimina la clave GPG de prueba del ring de ~/.gnupg (no falla si no existe).
 remove_gpg_key() {
-  gpg --batch --yes --delete-keys 228A7E23748A40F925E7DEECFAAA6809B0971ADC 2>/dev/null || true
+  gpg --batch --yes --delete-keys E4AC7735BD60196E19123DB6247EEE5F6AA25EC9 2>/dev/null || true
   echo "  clave GPG de prueba eliminada (si existía)"
 }
 
