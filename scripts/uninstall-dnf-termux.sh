@@ -1,30 +1,33 @@
 #!/usr/bin/env bash
 # uninstall-dnf-termux.sh — desinstala el stack dnf5 de Termux. Espejo del
-# instalador (scripts/install-dnf-termux.sh): elimina los 7 paquetes pacman que
-# instala (dnf5, rpm, libsolv, librepo, libcomps, zchunk, createrepo-c), la
-# config/runtime de dnf5/libdnf5, la rpmdb (con backup en $TMPDIR) y la clave
-# GPG de prueba del ring de ~/.gnupg.
+# instalador (scripts/install-dnf-termux.sh): elimina los 8 paquetes pacman que
+# instala (dnf5, rpm, libpopt, libsolv, librepo, libcomps, zchunk,
+# createrepo-c), la config/runtime de dnf5/libdnf5 (incluido el staging del
+# instalador $HOME/.cache/dnf-termux-install y la caché de metadata
+# $PREFIX/var/cache/dnf), la rpmdb (con backup en $TMPDIR) y la clave GPG de
+# prueba del ring de ~/.gnupg.
 #
 # CONSERVA por defecto:
 #   $HOME/dnf-gpg                     → clave de firma del repo
-#   $HOME/dnf-repo, dnf-repo-remote, dnf-pkgs*, dnf-rpms, dnf-artifacts,
-#   $HOME/.cache/dnf-termux-install   → stagings de descarga/build
+#   $HOME/dnf-repo, dnf-repo-remote, dnf-pkgs*, dnf-rpms, dnf-artifacts
+#                                     → stagings de descarga/build
 #
 # Uso:
 #   uninstall-dnf-termux.sh [--purge] [--help]
 #
 # Sin flags:
-#   desinstala los 7 paquetes con `pacman -Rdd --noconfirm` (solo los que están
+#   desinstala los 8 paquetes con `pacman -Rdd --noconfirm` (solo los que están
 #   instalados, detectados con `pacman -Q`), elimina config/runtime, hace backup
 #   de la rpmdb y la elimina, y borra la clave GPG de prueba de ~/.gnupg.
 #
-# --purge: además elimina $HOME/dnf-gpg y los stagings.
+# --purge: además elimina $HOME/dnf-gpg y los stagings de build.
 # --help:  muestra esta ayuda.
 set -euo pipefail
 
-# Los 7 paquetes del stack instalados por install-dnf-termux.sh (matrix de
-# build.yml: zchunk, libcomps, libsolv, librepo, rpm, createrepo-c, dnf5).
-PKGS=(dnf5 rpm libsolv librepo libcomps zchunk createrepo-c)
+# Los 8 paquetes del stack instalados por install-dnf-termux.sh (matrix de
+# build.yml: zchunk, libcomps, libsolv, librepo, rpm, libpopt, createrepo-c,
+# dnf5).
+PKGS=(dnf5 rpm libpopt libsolv librepo libcomps zchunk createrepo-c)
 
 usage() {
   cat <<'EOF'
@@ -33,21 +36,22 @@ Uso: uninstall-dnf-termux.sh [--purge] [--help]
 Desinstala el stack dnf5 de Termux (espejo de install-dnf-termux.sh).
 
 Sin flags:
-    Desinstala los 7 paquetes pacman (dnf5, rpm, libsolv, librepo, libcomps,
-    zchunk, createrepo-c) con:  pacman -Rdd --noconfirm
+    Desinstala los 8 paquetes pacman (dnf5, rpm, libpopt, libsolv, librepo,
+    libcomps, zchunk, createrepo-c) con:  pacman -Rdd --noconfirm
     (solo los instalados; el resto se omite).
-    Elimina config/runtime de dnf5/libdnf5, la rpmdb (con backup en $TMPDIR) y
-    la clave GPG de prueba de ~/.gnupg.
-    CONSERVA $HOME/dnf-gpg (clave de firma del repo) y los stagings.
+    Elimina config/runtime de dnf5/libdnf5 (incluido el staging del instalador
+    $HOME/.cache/dnf-termux-install y la caché de metadata $PREFIX/var/cache/dnf),
+    la rpmdb (con backup en $TMPDIR) y la clave GPG de prueba de ~/.gnupg.
+    CONSERVA $HOME/dnf-gpg (clave de firma del repo) y los stagings de build
+    ($HOME/dnf-repo, dnf-repo-remote, dnf-pkgs*, dnf-rpms, dnf-artifacts).
 
 --purge:
-    Además elimina $HOME/dnf-gpg y los stagings:
+    Además elimina $HOME/dnf-gpg y los stagings de build:
         $HOME/dnf-repo
         $HOME/dnf-repo-remote
         $HOME/dnf-pkgs*
         $HOME/dnf-rpms
         $HOME/dnf-artifacts
-        $HOME/.cache/dnf-termux-install
 
 --help:
     Muestra esta ayuda.
@@ -71,7 +75,7 @@ check_env() {
   fi
 }
 
-# Desinstala los 7 paquetes con pacman -Rdd --noconfirm. Solo procesa los que
+# Desinstala los 8 paquetes con pacman -Rdd --noconfirm. Solo procesa los que
 # están instalados (detectados con pacman -Q); el resto se omite.
 remove_pkgs() {
   local -a installed=()
@@ -87,18 +91,22 @@ remove_pkgs() {
     echo "Desinstalando: ${installed[*]}"
     pacman -Rdd --noconfirm "${installed[@]}"
   else
-    echo "Ninguno de los 7 paquetes está instalado; se omite pacman -Rdd."
+    echo "Ninguno de los 8 paquetes está instalado; se omite pacman -Rdd."
   fi
 }
 
 # Elimina config/runtime de dnf5/libdnf5 (solo lo que exista):
 #   $PREFIX/etc/yum.repos.d, $PREFIX/etc/dnf, $PREFIX/var/lib/dnf,
+#   $PREFIX/var/cache/dnf (caché de metadata de dnf5),
+#   $HOME/.cache/dnf-termux-install (staging del instalador, se elimina siempre),
 #   $HOME/.cache/libdnf5, $HOME/.local/state/dnf5.log
 remove_config_runtime() {
   local -a dirs=(
     "$PREFIX/etc/yum.repos.d"
     "$PREFIX/etc/dnf"
     "$PREFIX/var/lib/dnf"
+    "$PREFIX/var/cache/dnf"
+    "$HOME/.cache/dnf-termux-install"
     "$HOME/.cache/libdnf5"
   )
   local d
@@ -133,7 +141,9 @@ remove_gpg_key() {
   echo "  clave GPG de prueba eliminada (si existía)"
 }
 
-# --purge: elimina $HOME/dnf-gpg y los stagings.
+# --purge: elimina $HOME/dnf-gpg y los stagings de build. El staging del
+# instalador $HOME/.cache/dnf-termux-install ya se eliminó siempre en
+# remove_config_runtime.
 purge_stagings() {
   local -a paths=(
     "$HOME/dnf-gpg"
@@ -141,7 +151,6 @@ purge_stagings() {
     "$HOME/dnf-repo-remote"
     "$HOME/dnf-rpms"
     "$HOME/dnf-artifacts"
-    "$HOME/.cache/dnf-termux-install"
   )
   local p
   for p in "${paths[@]}"; do
@@ -160,7 +169,7 @@ purge_stagings() {
   done
 }
 
-# Verificación final: ninguno de los 7 paquetes debe seguir instalado.
+# Verificación final: ninguno de los 8 paquetes debe seguir instalado.
 verify() {
   echo ""
   echo "=== Verificación ==="
@@ -172,7 +181,7 @@ verify() {
     fi
   done
   if [ "${#left[@]}" -eq 0 ]; then
-    echo "OK: los 7 paquetes del stack dnf5 están desinstalados."
+    echo "OK: los 8 paquetes del stack dnf5 están desinstalados."
   else
     echo "ADVERTENCIA: siguen instalados: ${left[*]}" >&2
     exit 1
@@ -218,7 +227,7 @@ main() {
     purge_stagings
   else
     echo ""
-    echo "Nota: se conservan \$HOME/dnf-gpg y los stagings (usa --purge para eliminarlos)."
+    echo "Nota: se conservan \$HOME/dnf-gpg y los stagings de build (usa --purge para eliminarlos)."
   fi
 
   verify
