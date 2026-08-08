@@ -87,9 +87,12 @@ jobs:
           # %__gpg_sign_cmd explícito: gpg directo sin agente/pinentry (CI no
           # tiene TTY; el macro por defecto de Ubuntu falla con
           # "Could not set GPG_TTY to stdin" y no firma).
+          # IMPORTANTE: %%{__signature_filename} y %%{__plaintext_filename} van
+          # escapados (%% -> %) para que rpm los expanda en tiempo de ejecución
+          # y no al parsear el --define.
           rpm --addsign \
             --define "_gpg_name dnf-for-termux" \
-            --define "__gpg_sign_cmd %{__gpg} gpg --batch --no-tty --no-armor --pinentry-mode loopback --passphrase '' --output %{__signature_filename} --detach-sign --local-user %{_gpg_name} %{__plaintext_filename}" \
+            --define "__gpg_sign_cmd %{__gpg} gpg --batch --no-tty --no-armor --output %%{__signature_filename} --detach-sign --local-user %{_gpg_name} %%{__plaintext_filename}" \
             /tmp/rpm-repo/*.rpm
           rpm -K /tmp/rpm-repo/*.rpm | grep -c 'signatures OK'   # esperado 8
           # Metadatos del repo y firma del repomd.xml
