@@ -3,12 +3,19 @@
 Registro de progreso de la sesión. Estado consolidado y verificado contra el repo real
 (`packages/*`, `.github/workflows/build.yml`, `scripts/mkrepo.sh`, `git log`,
 `gh run list/view`).
-Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.3 — deploy
-automatizado del repo RPM en CI **OPERATIVO**: workflow `deploy.yml` (disparo manual
-`workflow_dispatch`), run `31276974715` SUCCESS (8 rpms convertidos y firmados con la clave
-del secret `RPM_SIGNING_KEY`, "digests signatures OK", `repodata/` + `repomd.xml` firmado
-publicados a gh-pages/rpm/, repo actualizado a `dnf5-5.4.2.1-1`) y **rotación de la clave de
-firma** (la privada anterior `228A7E23...` se perdió con el `uninstall --purge`; clave nueva
+Fecha del registro: 2026-08-08 (última actualización 2026-08-08, Fase 1.4 — **fix del SIGSEGV
+de `dnf5 history list`** con el backport del fix upstream 4.18.2 de rpm (commit `d018e756`):
+patch `termux-remove-sqlite3-global-log.patch` (commit `04e5089`) que elimina el **callback
+GLOBAL de sqlite3** que rpm 4.18.1 registraba en `lib/backend/sqlite.c`
+(`sqlite3_config(SQLITE_CONFIG_LOG, errCb, rdb)` → use-after-free); **REVISION rpm → 4**
+(commit `c1bb30e`), rebuild rpm+dnf5 (run `31296859502` SUCCESS) y **VALIDADO en el
+dispositivo**: `dnf5 history list` lista las 17 transacciones EXIT=0 sin SIGSEGV con WAL
+pendiente real (16 KB)); previa: Fase 1.3 — deploy automatizado del repo RPM en CI
+**OPERATIVO**: workflow `deploy.yml` (disparo manual `workflow_dispatch`), run
+`31276974715` SUCCESS (8 rpms convertidos y firmados con la clave del secret
+`RPM_SIGNING_KEY`, "digests signatures OK", `repodata/` + `repomd.xml` firmado publicados a
+gh-pages/rpm/, repo actualizado a `dnf5-5.4.2.1-1`) y **rotación de la clave de firma** (la
+privada anterior `228A7E23...` se perdió con el `uninstall --purge`; clave nueva
 `E4AC7735...` con backup en `$HOME/dnf-for-termux-signing-key.asc`); previa:
 Fase 1.2 — firma de paquetes GPG CERRADA y VALIDADA en el dispositivo: el SIGSYS de rpm
 resuelto con un patch de libpopt, los 7 RPMs del repo firmados con `rpm --addsign` en el
@@ -95,6 +102,18 @@ causa raíz en la tabla más abajo. El último fix exitoso (ad550f0) eliminó la
   `$HOME/dnf-for-termux-signing-key.asc` y el secret `RPM_SIGNING_KEY` configurado; el
   dispositivo quedó con el **stack 8/8 reinstalado y operativo** con la clave nueva (ver
   sección "Fase 1.3").
+  Y después (Fase 1.4, 2026-08-08): el **SIGSEGV (139) de `dnf5 history list` quedó
+  RESUELTO** — la causa raíz era un **callback GLOBAL de sqlite3** que rpm 4.18.1 registraba
+  en el proceso (`lib/backend/sqlite.c`: `sqlite3_config(SQLITE_CONFIG_LOG, errCb, rdb)`,
+  líneas 47-52 y 173) y que dereferenciaba `rdb->db_descr` ya liberado → **use-after-free**:
+  cualquier otra conexión sqlite (la db de historial `transaction_history.sqlite` de dnf5)
+  disparaba el callback sobre memoria reutilizada (`*(pArg+0x28)=0x2`) → `strlen(0x2)` →
+  SIGSEGV. Fix: **backport del fix upstream 4.18.2** (commit `d018e756`) con el patch
+  `termux-remove-sqlite3-global-log.patch` (commit `04e5089`, elimina `errCb` +
+  `sqlite3_config`) y **REVISION rpm → 4** (commit `c1bb30e`); rebuild rpm+dnf5 (run
+  `31296859502` SUCCESS) y **VALIDADO en el dispositivo**: `dnf5 history list` **lista las 17
+  transacciones EXIT=0 sin SIGSEGV** (test CONCLUSIVO con WAL pendiente real de 16 KB;
+  `librpm.so` sin referencias a `sqlite3_config` según readelf) (ver sección "Fase 1.4").
 
 ## Stack de paquetes
 
@@ -719,10 +738,78 @@ rotada** (nueva `E4AC7735...`) con **backup** y el secret `RPM_SIGNING_KEY` conf
 dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte formal) y
 **ecosistema completo** (más RPMs en el repo).
 
+## Fase 1.4 — Fix del SIGSEGV de dnf5 history (callback global sqlite3 de librpm)
+
+Sesión posterior a la Fase 1.3 (2026-08-08). El detallito residual del **historial de dnf5**
+quedó **RESUELTO**: `dnf5 history list` crasheaba con **SIGSEGV (139)** cuando el WAL de
+`transaction_history.sqlite` tenía frames pendientes. La causa raíz estaba en **rpm 4.18.1**
+(`lib/backend/sqlite.c`), NO en dnf5, y se resolvió con un **backport del fix upstream
+4.18.2**. Estado verificado contra `git log` (commits `04e5089`, `c1bb30e`),
+`packages/rpm/` (patch `termux-remove-sqlite3-global-log.patch`, `build.sh` REVISION=4),
+`gh run view 31296859502`, `readelf` sobre el `librpm.so` instalado y el test en el
+dispositivo.
+
+### ✅ Diagnóstico (gdb + investigación): callback GLOBAL de sqlite3 en rpm
+
+- `dnf5 history list` moría con **SIGSEGV (139)** cuando el WAL de
+  `transaction_history.sqlite` tenía frames pendientes.
+- **Causa raíz**: `lib/backend/sqlite.c` de rpm 4.18.1 registra un callback **GLOBAL** de
+  sqlite3 — `sqlite3_config(SQLITE_CONFIG_LOG, errCb, rdb)` (líneas 47-52 y 173) — que
+  dereferencia `rdb->db_descr`. Al ser **config de proceso** y poder estar `rdb` **liberado**
+  → **use-after-free**: cualquier **otra** conexión sqlite (la db de historial de dnf5)
+  dispara el callback sobre memoria reutilizada (`*(pArg+0x28)=0x2`) → `strlen(0x2)` →
+  SIGSEGV.
+- NO era un bug de dnf5: el callback global que rpm dejaba registrado en el proceso mataba a
+  cualquier proceso que abriera otra db sqlite.
+
+### ✅ Fix: backport del fix upstream 4.18.2 (commit `d018e756`)
+
+- Patch **`packages/rpm/termux-remove-sqlite3-global-log.patch`** (commit `04e5089`):
+  backport del fix upstream **"Don't muck with per-process global sqlite configuration"**
+  (4.18.2, commit `d018e756`); elimina `errCb` y la llamada `sqlite3_config`.
+- **REVISION rpm → 4** (commit `c1bb30e`): `rpm-4.18.1-4` > `4.18.1-3` > el oficial
+  `4.18.1-2` de termux-main.
+- **Rebuild rpm + dnf5**: run **`31296859502`** — **todos los jobs SUCCESS**. dnf5
+  recompiló por el **hash de deps que incluye los patches de rpm**: los paquetes que
+  dependen de rpm (dnf5, librepo, libsolv, createrepo-c) recompilan porque su hash incluye
+  los patches de rpm — **comportamiento correcto del mecanismo de caché anti-rebuilds**.
+
+### ✅ Validación en el dispositivo
+
+1. **Workaround `wal_checkpoint(TRUNCATE)`** aplicado y verificado (17 transacciones,
+   EXIT=0).
+2. **`librpm.so` instalado sin referencias a `sqlite3_config`** (verificado con `readelf`).
+3. **Test CONCLUSIVO con WAL pendiente real (16 KB)**: `dnf5 history list` **lista las 17
+   transacciones EXIT=0 sin SIGSEGV**.
+
+### Commits y run de la Fase 1.4
+
+| Commit | Área | Qué hace |
+|---|---|---|
+| `04e5089` | rpm | patch `termux-remove-sqlite3-global-log.patch`: elimina el callback global de sqlite3 (`errCb` + `sqlite3_config`) — backport del fix upstream 4.18.2 `d018e756` (fix del SIGSEGV de `dnf5 history list` en WAL recovery) |
+| `c1bb30e` | rpm | **REVISION=4** (`4.18.1-4`) — bump por el nuevo patch (fix del SIGSEGV de dnf5 history) |
+
+| Run ID | Resultado | Notas |
+|---|---|---|
+| `31296859502` | ✅ SUCCESS | rebuild de rpm (REVISION=4) + dnf5 (recompiló por el hash de deps con los patches de rpm); todos los jobs en verde |
+
+**Conclusión (Fase 1.4)**: el **detallito del historial de dnf5 quedó RESUELTO** — el SIGSEGV
+(139) de `dnf5 history list` con WAL pendiente quedó **fijado** con el backport del fix
+upstream 4.18.2 de rpm (eliminar el callback GLOBAL de sqlite3 que causaba el use-after-free
+en procesos que abren otras dbs sqlite) y **validado en el dispositivo**: `dnf5 history list`
+lista las 17 transacciones EXIT=0 sin SIGSEGV (test CONCLUSIVO con WAL pendiente real de 16
+KB). Pendientes: **T12** (reporte formal) y **ecosistema completo** (más RPMs en el repo).
+
 ## Último estado exacto para retomar
 
-- **Último commit**: `3a27f01` — `fix(ci): import pubkey into rpm keyring (local dbpath) so
-  rpm -K validates signatures` (Fase 1.3, último fix del pipeline de deploy). Le preceden los
+- **Último commit**: `c1bb30e` — `build(rpm): bump revision to 4 (sqlite3 global log
+  callback removed — SIGSEGV fix)` (Fase 1.4, **REVISION rpm → 4**). Le precede `04e5089` —
+  `fix(rpm): remove global sqlite3 log callback (backport 4.18.2 d018e756)` (el patch
+  `termux-remove-sqlite3-global-log.patch` que elimina el **callback GLOBAL de sqlite3** de
+  `lib/backend/sqlite.c` de rpm 4.18.1 — **fix del SIGSEGV de `dnf5 history list`** en WAL
+  recovery). Más atrás: `3a27f01` — `fix(ci): import pubkey into rpm keyring (local dbpath)
+  so rpm -K validates signatures` (Fase 1.3, último fix del pipeline de deploy). Le preceden
+  los
   fixes del deploy: `03c16dc` (ruta absoluta de gpg vía `command -v`; el env de firma de rpm
   no hereda PATH), `09af991` (gpg plano en el cmd de firma + diagnósticos), `cd6ce52`
   (`%__gpg_sign_cmd` definido en `~/.rpmmacros` del runner), `4dca530` (escape de macros rpm
@@ -749,17 +836,27 @@ dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte for
   `52528a6`/`058d61e`/`d14d2fc` (Fase 0.9), `197f036` (rpm en matrix),
   `3c6532b`/`ac354d0` (fixes de la Fase 0.8), `37b5864` (docs: Fase 0.7), `4bfb93e`
   (mkrepo.sh), `c381c0d`/`7c5592f`/`805410d` (Fase 0.6) y `ad550f0` (fix try-compile, HITO 5/5).
-- **Último run verificado**: `31276974715` — **SUCCESS** (Fase 1.3, deploy automatizado):
-  8 rpms convertidos y firmados (8 "digests signatures OK"), `repodata/` generada con
-  `createrepo_c`, `repomd.xml` firmado y el repo publicado a gh-pages/rpm/ (`dnf5-5.4.2.1-1`
-  reemplaza al `-0` desactualizado). Run CI previo de referencia: `31271307345` — **SUCCESS
-  9/9** (Fase 1.2): todos los jobs de la matrix, incluido **`build (libpopt)`** con
+- **Último run verificado**: `31296859502` — **SUCCESS** (Fase 1.4, rebuild de rpm
+  REVISION=4 tras el patch del callback sqlite3 + dnf5; todos los jobs en verde). dnf5
+  recompiló por el **hash de deps que incluye los patches de rpm** — los paquetes que
+  dependen de rpm (dnf5, librepo, libsolv, createrepo-c) recompilan por ese hash:
+  **comportamiento correcto de la caché anti-rebuilds**. Run previo de referencia:
+  `31276974715` — **SUCCESS** (Fase 1.3, deploy automatizado): 8 rpms convertidos y firmados
+  (8 "digests signatures OK"), `repodata/` generada con `createrepo_c`, `repomd.xml` firmado
+  y el repo publicado a gh-pages/rpm/ (`dnf5-5.4.2.1-1` reemplaza al `-0` desactualizado).
+  Run CI previo de referencia: `31271307345` — **SUCCESS 9/9** (Fase 1.2): todos los jobs de
+  la matrix, incluido **`build (libpopt)`** con
   `Verify AArch64` (valida el port que arregla el SIGSYS de rpm). Runs previos de referencia:
   `31242682232` (SUCCESS 8/8, Fase 1.1: caché anti-rebuilds poblada), `31236591563` (SUCCESS
   8/8, Fase 1.0: createrepo-c), `31221704266` (SUCCESS 7/7, Fase 0.8), `31065452556` y
   `31071605356` (SUCCESS 6/6, Fase 0.6).
-- **Validación en dispositivo**: COMPLETADA (**Fase 1.3**, 2026-08-08) — **rotación de clave
-  de firma**: la privada anterior (`228A7E23...`) se perdió con el `uninstall --purge`; la
+- **Validación en dispositivo**: COMPLETADA (**Fase 1.4**, 2026-08-08) — **SIGSEGV de `dnf5
+  history list` fijado**: `librpm.so` **4.18.1-4** instalado **sin referencias a
+  `sqlite3_config`** (verificado con `readelf`) y **test CONCLUSIVO con WAL pendiente real
+  (16 KB)**: `dnf5 history list` **lista las 17 transacciones EXIT=0 sin SIGSEGV** (el
+  workaround `wal_checkpoint(TRUNCATE)` también quedó verificado: 17 transacciones, EXIT=0).
+  Previa (**Fase 1.3**, 2026-08-08) — **rotación de clave de firma**: la privada anterior
+  (`228A7E23...`) se perdió con el `uninstall --purge`; la
   clave **nueva** `E4AC7735BD60196E19123DB6247EEE5F6AA25EC9` quedó **importada en el
   dispositivo** (dnf5 repoquery OK) y el **stack 8/8 quedó reinstalado y operativo** con la
   clave nueva. Previa (**Fase 1.2**, 2026-08-08) — **firma de paquetes
@@ -789,7 +886,9 @@ dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte for
 - **Artifacts para el dispositivo**: en `$HOME/dnf-pkgs-new4/` (run `31221704266`):
   `rpm-4.18.1-2-aarch64.pkg.tar.xz` (parcheado, **obligatorio**) y
   `dnf5-5.4.2.1-0-aarch64.pkg.tar.xz`; **ambos ya instalados** en el dispositivo con `pacman -U`.
-  Históricos de Fase 0.6 (anteriores) en `$HOME/dnf-pkgs-new2/`.
+  En la **Fase 1.4** el rpm instalado quedó actualizado a **`rpm-4.18.1-4`** (run
+  `31296859502`, con el patch del callback sqlite3). Históricos de Fase 0.6 (anteriores) en
+  `$HOME/dnf-pkgs-new2/`.
 - **Formato CI**: pacman (`TERMUX_PACKAGE_FORMAT=pacman` vía `TERMUX_DOCKER_EXEC_EXTRA_ARGS`,
   commit `c381c0d`). El dispositivo usa termux-pacman 7.1.0-6 (root `$PREFIX`, 689+ paquetes).
 - **Archivos de `packages/dnf5/`** (verificado con `ls`):
@@ -802,11 +901,13 @@ dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte for
     `0012-renameat2-bionic.patch`, `0013-progress-bar-clock.patch`,
     `0014-termux-bootc-nonfhs.patch`, `0015-termux-gpg-import-trigger.patch`
     (0002 es `.diff` aplicado manualmente en `termux_step_post_get_source` con `|| true`).
-- **`packages/rpm/`** (nuevo, commit `3c6532b`, rpm 4.18.1-2 REVISION=2): `build.sh`,
-  `errno.patch`, `goto_declaration.patch` y `termux-rootless-unpack.patch` (re-ancla
+- **`packages/rpm/`** (commit `3c6532b`, rpm 4.18.1 **REVISION=4**): `build.sh`,
+  `errno.patch`, `goto_declaration.patch`, `termux-rootless-unpack.patch` (re-ancla
   `ensureDir()` de `lib/fsm.c` en TERMUX_PREFIX cuando `open("/")` da EACCES por SELinux en
-  Android rootless; ruta fuera del prefix → rechazo `failed to open dir %s: %s`). Se añadió a la
-  matrix del CI (commit `197f036`).
+  Android rootless; ruta fuera del prefix → rechazo `failed to open dir %s: %s`) y
+  `termux-remove-sqlite3-global-log.patch` (Fase 1.4, commit `04e5089`: elimina el **callback
+  GLOBAL de sqlite3** — backport del fix upstream 4.18.2 `d018e756`; REVISION→4 en el commit
+  `c1bb30e`). Se añadió a la matrix del CI (commit `197f036`).
 - **`packages/libpopt/`** (nuevo, commits `84a667f` + `a37f14b`, libpopt 1.19 REVISION=4):
   `build.sh` y los patches `src-libpopt.vers.patch` + `termux-no-elevated-exec-drop.patch`
   (envuelve el drop de privilegios de `execCommand()` en
@@ -850,7 +951,12 @@ dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte for
   El **deploy + la re-firma automatizados en CI** quedó **RESUELTO** (Fase 1.3, 2026-08-08):
   workflow `deploy.yml` operativo (run `31276974715` SUCCESS: 8 rpms, "digests signatures
   OK"), secret `RPM_SIGNING_KEY` configurado y repo publicado a gh-pages/rpm/ con
-  `dnf5-5.4.2.1-1`. El **test del install/uninstall script** quedó **ejercitado de extremo a
+  `dnf5-5.4.2.1-1`. El **SIGSEGV de `dnf5 history list`** quedó **RESUELTO** (Fase 1.4,
+  2026-08-08): backport del fix upstream 4.18.2 de rpm (patch
+  `termux-remove-sqlite3-global-log.patch`, commit `04e5089`; REVISION rpm → 4, `c1bb30e`),
+  rebuild rpm+dnf5 (run `31296859502` SUCCESS) y validado en el dispositivo (`dnf5 history
+  list` lista las 17 transacciones EXIT=0 sin SIGSEGV). El **test del install/uninstall
+  script** quedó **ejercitado de extremo a
   extremo** al reinstalar el stack **8/8** con la clave nueva (rotación de clave, Fase 1.3); el
   dispositivo quedó operativo.
   La firma de paquetes GPG quedó **CERRADA y VALIDADA** (Fase 1.2, 2026-08-08): el SIGSYS de
@@ -908,9 +1014,20 @@ dispositivo quedó reinstalado 8/8 y operativo. Pendientes: **T12** (reporte for
 - **(e) Ecosistema completo**: ¿convertir el resto del ecosistema Termux a RPM en CI? Es el gran
   reto de la Fase 2 (los 689+ paquetes del dispositivo tendrían que pasar por
   rpmbuild/`scripts/mkrepo.sh` o `createrepo_c`).
+- **(f) `dnf5 history list` (el "detallito de history")**: **RESUELTO (2026-08-08, Fase 1.4)**
+  — el **SIGSEGV (139)** al listar el historial con WAL pendiente en
+  `transaction_history.sqlite` quedó **fijado** con el backport del fix upstream de rpm
+  4.18.2 (commit `d018e756`, "Don't muck with per-process global sqlite configuration"):
+  patch `termux-remove-sqlite3-global-log.patch` (commit `04e5089`) que elimina el callback
+  **GLOBAL** de sqlite3 registrado por `lib/backend/sqlite.c` de rpm 4.18.1
+  (`sqlite3_config(SQLITE_CONFIG_LOG, errCb, rdb)` → use-after-free en procesos que abren
+  otras dbs sqlite). Rebuild rpm (**REVISION=4**, commit `c1bb30e`) + dnf5 (run
+  `31296859502` SUCCESS) y **validado en el dispositivo**: `dnf5 history list` **lista las 17
+  transacciones EXIT=0 sin SIGSEGV** (test CONCLUSIVO con WAL pendiente real de 16 KB).
 - **T12 (reporte final)**: T10 y T11 completadas (install `76c828a` y uninstall `cb47ebe`
   **simétricos**; review T11 con 4 MAJOR resueltos: `889eb4e` M1/M2, `af949a1` M3,
   `e541907` M4), la **Fase 1.2 cerrada y validada en dispositivo** (gpgcheck/repo_gpgcheck
-  confirmados), la **Fase 1.3 cerrada** (deploy automatizado + rotación de clave) y el
+  confirmados), la **Fase 1.3 cerrada** (deploy automatizado + rotación de clave), la
+  **Fase 1.4 cerrada** (SIGSEGV de `dnf5 history list` fijado) y el
   install/uninstall **ejercitado de extremo a extremo** en la reinstalación 8/8 — ¿se continúa
   con T12 formal y el ecosistema completo?
