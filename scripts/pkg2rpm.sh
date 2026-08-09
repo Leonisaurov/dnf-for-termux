@@ -11,7 +11,8 @@
 #   1. Extrae el .pkg a un staging (bsdtar/tar).
 #   2. Lee .PKGINFO (bsdtar -xOf): pkgname, pkgver, arch, pkgdesc, license.
 #      pkgver "5.4.2.1-1" -> Version="5.4.2.1", Release="1" (se separa por el
-#      ÚLTIMO guion).
+#      ÚLTIMO guion). El prefijo "epoch:" de Termux (ej. "1:2026.07.16-0") se
+#      separa en Epoch/Version y se emite el tag Epoch: en el spec.
 #   3. Genera un spec: Name, Version, Release, Summary, License, BuildArch
 #      aarch64, AutoReqProv no, %global __os_install_post %{nil}; %install copia
 #      data/data/com.termux/files/usr/. a %{buildroot}; %files con TODAS las
@@ -80,6 +81,18 @@ else
   RELEASE="1"
 fi
 
+# Termux usa "epoch:version" en pkgver (ej. "1:2026.07.16-0" con epoch=1).
+# rpmbuild rechaza ':' en el tag Version:, así que se separa el epoch y se emite
+# el tag Epoch: (numérico) en su lugar. Si no hay ':', EPOCH queda vacío.
+EPOCH=""
+if [[ "$VERSION" == *:* ]]; then
+  EPOCH="${VERSION%%:*}"
+  VERSION="${VERSION#*:}"
+fi
+# Línea condicional del spec: si EPOCH está vacío se omite el tag (rpmbuild
+# abortaría con "Empty tag: Epoch:" o un epoch no numérico).
+[ -n "$EPOCH" ] && EPOCH_LINE="Epoch:          $EPOCH" || EPOCH_LINE=""
+
 [ -n "$ARCH" ] || ARCH="aarch64"
 
 # --- 3. generar el spec ---
@@ -95,6 +108,7 @@ cat > "$SPEC" <<EOF
 Name:           $NAME
 Version:        $VERSION
 Release:        $RELEASE
+$EPOCH_LINE
 Summary:        $SUMMARY
 License:        $LICENSE
 BuildArch:      $ARCH
