@@ -1,0 +1,41 @@
+From: termux <maintainer@termux.dev>
+Subject: Remove per-process global sqlite3 log callback from rpmdb backend
+
+The sqlite db backend installs a process-wide sqlite3 log handler
+(sqlite3_config(SQLITE_CONFIG_LOG, errCb, rdb)) that dereferences
+rdb->db_descr. This is a per-process global setting, but the callback
+closure points to an rpmdb handle that may already be freed (use-after-free).
+Any other sqlite3 connection in the process (e.g. the dnf5 history
+database) can then trigger the stale callback on reused memory, causing
+a SIGSEGV in dnf5 history list when the history WAL has pending frames.
+
+Backport of upstream fix for rpm 4.18.2:
+commit d018e756b72c18d30e7c9109a552b86889e75c99
+"Don't muck with per-process global sqlite configuration from the db backend"
+
+diff --git a/lib/backend/sqlite.c b/lib/backend/sqlite.c
+index d538973..2627fa3 100644
+--- a/lib/backend/sqlite.c
++++ b/lib/backend/sqlite.c
+@@ -44,13 +44,6 @@ static void rpm_match3(sqlite3_context *sctx, int argc, sqlite3_value **argv)
+     sqlite3_result_int(sctx, match);
+ }
+ 
+-static void errCb(void *data, int err, const char *msg)
+-{
+-    rpmdb rdb = data;
+-    rpmlog(RPMLOG_WARNING, "%s: %s: %s\n",
+-		rdb->db_descr, sqlite3_errstr(err), msg);
+-}
+-
+ static int dbiCursorReset(dbiCursor dbc)
+ {
+     if (dbc->stmt) {
+@@ -170,7 +163,6 @@ static int sqlite_init(rpmdb rdb, const char * dbhome)
+ 	 * the "database is locked" errors at every cost
+ 	 */
+ 	sqlite3_busy_timeout(sdb, 10000);
+-	sqlite3_config(SQLITE_CONFIG_LOG, errCb, rdb);
+ 
+ 	sqlexec(sdb, "PRAGMA secure_delete = OFF");
+ 	sqlexec(sdb, "PRAGMA case_sensitive_like = ON");
