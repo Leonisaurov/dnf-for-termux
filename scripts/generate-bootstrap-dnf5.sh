@@ -90,9 +90,11 @@ PROJECT_STACK=(dnf5 rpm libpopt libsolv librepo libcomps zchunk createrepo-c)
 # NO en $PREFIX/lib: un DT_NEEDED contra ellas es correcto (C6), no un MISS.
 BIONIC_LIBS=(libc.so libdl.so libm.so liblog.so libandroid.so libjnigraphics.so linker64 ld-android.so)
 
-# Ruta relativa de la rpmdb DENTRO del rootfs (relativa al root; rpm >= 4.16 la
-# une a --root). El dispositivo la verá en $PREFIX/var/lib/rpm.
-DBREL="data/data/com.termux/files/usr/var/lib/rpm"
+# Ruta ABSOLUTA de la rpmdb DENTRO del rootfs: rpm >= 4.18 rechaza --dbpath
+# relativo ("arguments to --dbpath must begin with '/'") y une el absoluto a
+# --root, con lo que en disco queda $ROOTFS/data/data/... (idéntico al layout
+# anterior relativo). El dispositivo la verá en $PREFIX/var/lib/rpm.
+DBREL="/data/data/com.termux/files/usr/var/lib/rpm"
 
 # --- helpers ----------------------------------------------------------------
 log()  { printf '== %s\n' "$*" >&2; }
