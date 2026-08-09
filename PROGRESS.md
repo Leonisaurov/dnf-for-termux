@@ -800,9 +800,40 @@ en procesos que abren otras dbs sqlite) y **validado en el dispositivo**: `dnf5 
 lista las 17 transacciones EXIT=0 sin SIGSEGV (test CONCLUSIVO con WAL pendiente real de 16
 KB). Pendientes: **T12** (reporte formal) y **ecosistema completo** (más RPMs en el repo).
 
+## Fase 1.5 — dnf-hello restaurado y repo sincronizado
+
+Sesión posterior a la Fase 1.4 (2026-08-08). Estado verificado contra `git log` (commits
+`d0045c1`, `b418537`), `gh run view 31303160667` / `31303896890`, la firma del repo en
+gh-pages (HTTP 200) y el test en el dispositivo.
+
+### ✅ dnf-hello restaurado como paquete de primera clase
+
+- **`packages/dnf-hello/`** (commits `d0045c1` + `b418537`): **script package** con
+  `TERMUX_PKG_SKIP_SRC_EXTRACT`; instala `/usr/bin/dnf-hello` → imprime "dnf5 funciona en
+  Termux!".
+- Build run **`31303160667`** — **10/10 SUCCESS**; solo dnf-hello compiló (el resto,
+  **cache-hit** de la caché anti-rebuilds).
+
+### ✅ rpm-4.18.1-4 sincronizado y repo publicado
+
+- **Dispositivo**: `pacman -Q rpm` = **4.18.1-4**; el **fix del SIGSEGV sigue activo**
+  (`dnf5 history list` EXIT=0).
+- **Repo remoto**: deploy **`31303896890`** — **9 rpms firmados** incl. `dnf-hello-1.0-1` y
+  `rpm-4.18.1-4`; HTTP 200 en gh-pages.
+
+### ✅ Hello world operativo
+
+```sh
+dnf5 -y install dnf-hello && dnf-hello
+```
+
 ## Último estado exacto para retomar
 
-- **Último commit**: `c1bb30e` — `build(rpm): bump revision to 4 (sqlite3 global log
+- **Último commit**: `b418537` — `ci(build): add dnf-hello to matrix` (Fase 1.5, dnf-hello en
+  la matrix del CI). Le precede `d0045c1` — `feat(dnf-hello): add hello world test package
+  (script package, SKIP_SRC_EXTRACT)` (Fase 1.5, restaura **`packages/dnf-hello/`** como
+  paquete de primera clase: script package que instala `/usr/bin/dnf-hello` → "dnf5 funciona
+  en Termux!"). Le precede `c1bb30e` — `build(rpm): bump revision to 4 (sqlite3 global log
   callback removed — SIGSEGV fix)` (Fase 1.4, **REVISION rpm → 4**). Le precede `04e5089` —
   `fix(rpm): remove global sqlite3 log callback (backport 4.18.2 d018e756)` (el patch
   `termux-remove-sqlite3-global-log.patch` que elimina el **callback GLOBAL de sqlite3** de
@@ -836,7 +867,12 @@ KB). Pendientes: **T12** (reporte formal) y **ecosistema completo** (más RPMs e
   `52528a6`/`058d61e`/`d14d2fc` (Fase 0.9), `197f036` (rpm en matrix),
   `3c6532b`/`ac354d0` (fixes de la Fase 0.8), `37b5864` (docs: Fase 0.7), `4bfb93e`
   (mkrepo.sh), `c381c0d`/`7c5592f`/`805410d` (Fase 0.6) y `ad550f0` (fix try-compile, HITO 5/5).
-- **Último run verificado**: `31296859502` — **SUCCESS** (Fase 1.4, rebuild de rpm
+- **Último run verificado**: build **`31303160667`** — **SUCCESS 10/10** (Fase 1.5, dnf-hello
+  en la matrix; solo dnf-hello compiló — el resto **cache-hit**) y deploy **`31303896890`** —
+  **SUCCESS** (Fase 1.5, repo sincronizado a gh-pages: **9 rpms firmados** incl.
+  `dnf-hello-1.0-1` y `rpm-4.18.1-4`, HTTP 200). **Hello world operativo**:
+  `dnf5 -y install dnf-hello && dnf-hello`. Run previo de referencia: `31296859502` —
+  **SUCCESS** (Fase 1.4, rebuild de rpm
   REVISION=4 tras el patch del callback sqlite3 + dnf5; todos los jobs en verde). dnf5
   recompiló por el **hash de deps que incluye los patches de rpm** — los paquetes que
   dependen de rpm (dnf5, librepo, libsolv, createrepo-c) recompilan por ese hash:
