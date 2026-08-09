@@ -176,6 +176,16 @@ in_bionic_libs() {
   return 1
 }
 
+# in_clang_runtime <lib>: 0 si la lib es un runtime de clang sanitizer
+# (libclang_rt.*). NO viene en paquetes Termux: solo la referencian los binarios
+# de prueba -fsanitize de termux-core/termux-exec (libexec/installed-tests), que
+# nunca se ejecutan en el bootstrap. DT_NEEDED contra ella es aceptable (C6).
+# Patrón en vez de lista exacta: cubre variantes de arch y sanitizer
+# (asan/hwasan/ubsan/tsan, aarch64/android).
+in_clang_runtime() {
+  [[ "$1" == libclang_rt.* ]]
+}
+
 # dep_name <dep>: quita el operador de versión ("readline>=8.3-0" → "readline").
 dep_name() {
   local d="$1"
@@ -550,11 +560,15 @@ dt_needed_audit() {
   local libdir="$USR/lib" libexecdir="$USR/libexec"
   local -A have=()
   local f elf need fail=0 nelf=0 nneed=0
-  # sonames disponibles en lib/ y libexec/
+  # sonames disponibles en lib/ y libexec/: los paquetes Termux instalan la lib
+  # real con sufijo de versión (libz.so.1.3.2) MÁS un symlink soname
+  # (libz.so.1), y los DT_NEEDED apuntan al SONAME (el symlink). Con -type f
+  # solo, el symlink quedaba fuera del mapa → ~250 falsos MISS. Se incluyen los
+  # symlinks (sin -L: el basename de la ruta del symlink ES el SONAME buscado).
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     have[$(basename "$f")]=1
-  done < <(find "$libdir" "$libexecdir" -maxdepth 1 -type f -name '*.so*' 2>/dev/null)
+  done < <(find "$libdir" "$libexecdir" -maxdepth 1 \( -type f -o -type l \) -name '*.so*' 2>/dev/null)
 
   # ELF en bin/, lib/, libexec/ (file los identifica aunque sean aarch64)
   while IFS= read -r elf; do
@@ -567,6 +581,8 @@ dt_needed_audit() {
         printf 'OK   %s -> %s\n' "${elf#$USR/}" "$need" >> "$WORK/dt-needed-audit.txt"
       elif in_bionic_libs "$need"; then
         printf 'SYS  %s -> %s (bionic del dispositivo)\n' "${elf#$USR/}" "$need" >> "$WORK/dt-needed-audit.txt"
+      elif in_clang_runtime "$need"; then
+        printf 'SYS  %s -> %s (runtime clang sanitizer, no empaquetado)\n' "${elf#$USR/}" "$need" >> "$WORK/dt-needed-audit.txt"
       else
         printf 'MISS %s -> %s\n' "${elf#$USR/}" "$need" >> "$WORK/dt-needed-audit.txt"
         warn "DT_NEEDED sin resolver: $need (en ${elf#$USR/})"
