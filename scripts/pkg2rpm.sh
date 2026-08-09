@@ -59,6 +59,10 @@ PKGVER="$(field pkgver)"
 ARCH="$(field arch)"
 SUMMARY="$(field pkgdesc)"
 LICENSE="$(field license)"
+# rpmbuild aborta si el tag License: queda vacío ("Empty tag: License:").
+# Algunos paquetes (p.ej. bzip2) no declaran license en su .PKGINFO; se usa un
+# valor por defecto no vacío (rpmbuild no valida SPDX, acepta cualquier string).
+[ -n "$LICENSE" ] || LICENSE="unknown"
 
 if [ -z "$NAME" ] || [ -z "$PKGVER" ]; then
   echo "error: .PKGINFO incompleto (pkgname o pkgver vacíos)" >&2
