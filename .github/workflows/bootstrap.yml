@@ -32,7 +32,8 @@ jobs:
           GPG_BIN="$(command -v gpg)"
           printf '%%_gpg_name dnf-for-termux\n%%__gpg_sign_cmd %%{__gpg} gpg --batch --no-verbose --no-armor --output %%{__signature_filename} --detach-sign --local-user %%{_gpg_name} %%{__plaintext_filename}\n' > ~/.rpmmacros
           mkdir -p "$HOME/rpmdb"
-          gpg --export --armor E4AC7735BD60196E19123DB6247EEE5F6AA25EC9 | rpm --define "_dbpath $HOME/rpmdb" --import
+          "$GPG_BIN" --export --armor E4AC7735BD60196E19123DB6247EEE5F6AA25EC9 > "$HOME/rpm-pubkey.asc"
+          rpm --define "_dbpath $HOME/rpmdb" --import "$HOME/rpm-pubkey.asc"
       - name: Generate bootstrap
         env:
           SUDO: sudo
