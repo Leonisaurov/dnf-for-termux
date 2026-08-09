@@ -444,7 +444,7 @@ download_project_rpms() {
       case "$b" in
         "$name"-[0-9]*) href="$h"; break ;;
       esac
-    done < <(grep -oP '"'"$name"'-'"[0-9]"'[^"]*\.rpm' "$WORK/primary.xml")
+    done < <(grep -oP 'href="\K[^"]*'"$name"'-'"[0-9]"'[^"]*\.rpm' "$WORK/primary.xml")
     [ -n "$href" ] || die "no se encontró el .rpm de '$name' en primary.xml (gh-pages)"
     n=$((n+1))
     log "  [${n}] $name → $(basename "$href")"
