@@ -95,7 +95,7 @@ BIONIC_LIBS=(libc.so libdl.so libm.so liblog.so libandroid.so libjnigraphics.so 
 DBREL="data/data/com.termux/files/usr/var/lib/rpm"
 
 # --- helpers ----------------------------------------------------------------
-log()  { printf '== %s\n' "$*"; }
+log()  { printf '== %s\n' "$*" >&2; }
 warn() { printf '!! AVISO: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
