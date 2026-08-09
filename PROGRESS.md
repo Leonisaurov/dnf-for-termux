@@ -1067,3 +1067,33 @@ dnf5 -y install dnf-hello && dnf-hello
   **Fase 1.4 cerrada** (SIGSEGV de `dnf5 history list` fijado) y el
   install/uninstall **ejercitado de extremo a extremo** en la reinstalación 8/8 — ¿se continúa
   con T12 formal y el ecosistema completo?
+
+---
+
+## Bootstrap dnf5 (bootstrap.zip)
+
+**Estado: IMPLEMENTADO (script + workflow creados y verificados estáticamente); pendiente CI y validación on-device.**
+
+- **Qué se construyó**:
+  - `scripts/generate-bootstrap-dnf5.sh` (nuevo) — generador del bootstrap de Termux con dnf5
+    como gestor nativo: descarga el set de termux-pacman (base 30 + deps curadas + cierre
+    transitivo), convierte `.pkg` → `.rpm` (`scripts/pkg2rpm.sh`), firma siempre (M9), puebla la
+    rpmdb sqlite con `rpm --root`, verifica conffiles, audita DT_NEEDED (readelf), genera
+    `SYMLINKS.txt`, empaqueta `bootstrap-aarch64.zip` y verifica (unzip -l, rpm -qa en [50,200],
+    tamaño < 300MB, sha256). 14 pasos, correcciones C1–C6/M1–M9/m1–m5 aplicadas.
+  - `.github/workflows/bootstrap.yml` (nuevo) — CI: job `build` en `ubuntu-24.04-arm` (genera y
+    sube artifact `bootstrap-aarch64`) + job `publish` (descarga con download-artifact@v4 y
+    crea GitHub Release con tag `bootstrap-YYYY.MM.DD-rN+dnf5.android-7` y sha256 en las notas).
+- **Verificaciones locales**: `bash -n` OK; YAML parseable (pyyaml). No se ha lanzado el CI ni
+  se ha validado on-device (siguiente paso).
+- **Decisiones clave**:
+  - Cierre transitivo: **93 paquetes finales, 0 sin resolver** (nombre exacto; fallback por
+    índice provides). `python` aceptado en el cierre.
+  - **arch=any**: `termux-am` y `ca-certificates` se re-empaquetan con `fix_any_arch_pkg()`
+    (`.PKGINFO` parcheado a `aarch64`) antes de convertir a `.rpm` (rpmbuild falla con arch=any).
+  - **Conffile**: el `.rpm` de dnf5 ya instala `termux.repo` apuntando a gh-pages con
+    `gpgcheck=1 repo_gpgcheck=1`; el generador solo lo verifica (no lo reescribe).
+  - `termux-keyring` excluido del set base; `--no-sign` eliminado (siempre se firma).
+- **Referencia**: spec completa en `BOOTSTRAP-DESIGN.md` (incluye el bloque "Estado de
+  implementación" con todas las correcciones del code-review).
+

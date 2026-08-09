@@ -1,0 +1,75 @@
+name: bootstrap
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0"
+
+concurrency:
+  group: bootstrap-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y rpm jq zip unzip sqlite3 binutils curl gpg libarchive-tools file gzip
+      - name: Import signing key
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RPM_SIGNING_KEY:-}" ]; then
+            echo "::error::RPM_SIGNING_KEY secret is not set — no se puede importar la clave de firma"
+            exit 1
+          fi
+          echo "$RPM_SIGNING_KEY" | gpg --batch --import
+          GPG_BIN="$(command -v gpg)"
+          printf '%%_gpg_name dnf-for-termux\n%%__gpg_sign_cmd %%{__gpg} gpg --batch --no-verbose --no-armor --output %%{__signature_filename} --detach-sign --local-user %%{_gpg_name} %%{__plaintext_filename}\n' > ~/.rpmmacros
+          mkdir -p "$HOME/rpmdb"
+          gpg --export --armor E4AC7735BD60196E19123DB6247EEE5F6AA25EC9 | rpm --define "_dbpath $HOME/rpmdb" --import
+      - name: Generate bootstrap
+        env:
+          SUDO: sudo
+        run: ./scripts/generate-bootstrap-dnf5.sh --arch aarch64 --out bootstrap-out/ --sign-key "$HOME/rpmdb"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-aarch64
+          path: bootstrap-out/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bootstrap-aarch64
+      - name: Compute release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TODAY=$(date +%Y.%m.%d)
+          N=1
+          while gh api "repos/$GITHUB_REPOSITORY/releases/tags/bootstrap-${TODAY}-r${N}+dnf5.android-7" >/dev/null 2>&1; do N=$((N+1)); done
+          echo "tag=bootstrap-${TODAY}-r${N}+dnf5.android-7" >> "$GITHUB_OUTPUT"
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA=$(sha256sum bootstrap-aarch64/bootstrap-aarch64.zip | awk '{print $1}')
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            --title "Bootstrap archives for Termux application (dnf5.android-7)" \
+            --notes "Bootstrap aarch64 con dnf5 como gestor único. sha256: $SHA" \
+            bootstrap-aarch64/bootstrap-aarch64.zip

@@ -66,6 +66,37 @@ DNF/
 - **Registro de decisiones**: ADR-lite en PLAN.md sección 11 (Contexto/Decisión/Consecuencia/
   Alternativas/Fecha/Responsable).
 
+## Bootstrap generator (dnf5)
+
+- **Spec**: `BOOTSTRAP-DESIGN.md` (raíz) — generador de bootstrap dnf5 para Termux. Spec de
+  referencia; su bloque "## Estado de implementación" (línea 3) marca el estado
+  **IMPLEMENTADO (2026-08-09)** con las correcciones C1–C6/M1–M9/m1–m5 ya aplicadas.
+- **Script**: `scripts/generate-bootstrap-dnf5.sh` (703 líneas, implementado) — genera
+  `bootstrap-aarch64.zip` (árbol relativo a `$PREFIX` + rpmdb sqlite pre-poblada). Flags:
+  `--arch/--out/--work/--sign-key/--help`. Flujo en 14 pasos: set resuelto desde `main.json`
+  de termux-pacman (base 30 + deps curadas + cierre transitivo BFS sobre DEPENDS → **93 pkgs,
+  0 sin resolver**), `fix_any_arch_pkg()` re-empaqueta los `arch=any` a `aarch64`, conversión
+  `.pkg` → `.rpm` con `scripts/pkg2rpm.sh` + firma (siempre, M9), rpmdb poblada con
+  `rpm --root` (`--dbpath` relativo, `$SUDO`), verificación de conffiles (`termux.repo` →
+  gh-pages con `gpgcheck=1 repo_gpgcheck=1`), auditoría DT_NEEDED con `readelf` (whitelist
+  `BIONIC_LIBS`), `SYMLINKS.txt` (formato `target←path`), zip con entries relativos a `usr/`
+  y verificaciones finales (`unzip -l`, `rpm -qa` en [90,200] + `gpg-pubkey` ≥1, tamaño
+  <300MB, sha256).
+- **Workflow**: `.github/workflows/bootstrap.yml` (75 líneas, implementado) — disparo por
+  `workflow_dispatch` + `schedule` semanal (cron `0 0 * * 0`); job `build` en
+  **`ubuntu-24.04-arm`** (macros rpm aarch64; lección deploy.yml) con permissions
+  `{contents: read, actions: write}`, `apt install rpm jq zip unzip sqlite3 binutils curl gpg
+  libarchive-tools file gzip`, patrón de firma replicado de `deploy.yml` (secret
+  `RPM_SIGNING_KEY`, `~/.rpmmacros` con `%__gpg_sign_cmd`, clave pública importada en
+  `$HOME/rpmdb`) y artifact `bootstrap-aarch64` (`upload-artifact@v4`); job `publish` con
+  `download-artifact@v4` y `gh release create` con tag `bootstrap-YYYY.MM.DD-rN+dnf5.android-7`
+  (incrementa `rN` hasta tag libre) y sha256 en las notas.
+- **Convenciones**: `#!/usr/bin/env bash`, `set -euo pipefail`, `$TMPDIR` nunca `/tmp` en
+  Termux (fallback `/tmp` solo en runners), staging bajo `$TMPDIR`, `SUDO` por env para
+  `rpm --root`, zip creado desde `$USR` (nunca con prefijo `data/`), verificación estática en
+  CI (ELF aarch64 + `rpm -qa` + `unzip -l`); validación funcional on-device (los binarios
+  Android no corren en el runner).
+
 ## Observaciones
 
 - **Lección clave**: los 6 build.sh de `build/termux/` dicen literalmente
