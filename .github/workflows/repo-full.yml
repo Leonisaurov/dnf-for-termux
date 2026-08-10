@@ -269,8 +269,15 @@ jobs:
 
       # --- dry-run: verificar y reportar SIN publicar (C1) ---
       # Evidencia en GITHUB_STEP_SUMMARY + logs (no artifact: ver cabecera).
+      # GATE DEL DRY-RUN: invocar SIEMPRE con `-F dry-run=true` (bandera -F
+      # MAYÚSCULA = JSON/raw). NO usar `-f` (minúscula): gh envía el boolean
+      # como string que GitHub NO casa con la comparación == 'true', el paso
+      # no corre y peaceiris publica de todos modos (incidente en CI). El gate
+      # usa fromJSON(inputs.dry-run || 'false'): convierte el string "true"/
+      # "false" de GitHub en booleano real (inmune al gotcha) y el `|| 'false'`
+      # cubre los runs por schedule, donde el contexto inputs está vacío.
       - name: Dry-run check (sin publicar)
-        if: inputs.dry-run == 'true'
+        if: fromJSON(inputs.dry-run || 'false')
         run: |
           set -euo pipefail
           echo "== raíz staging (gh-pages) =="
@@ -298,8 +305,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # --- publicación (solo si NO es dry-run) ---
+      # Gate espejo del dry-run: !fromJSON(inputs.dry-run || 'false') == true
+      # SIEMPRE que dry-run NO sea "true" (incluido el default false del
+      # schedule y el incidente del flag -f). La negación va en ${{ }} para
+      # evitar que YAML la interprete como tag.
       - name: Publicar en gh-pages
-        if: inputs.dry-run != 'true'
+        if: ${{ !fromJSON(inputs.dry-run || 'false') }}
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
