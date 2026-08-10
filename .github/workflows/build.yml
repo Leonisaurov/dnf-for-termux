@@ -25,7 +25,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Lint build scripts
         run: |
           for f in packages/*/build.sh; do bash -n "$f"; done
@@ -38,7 +38,7 @@ jobs:
         pkg: [zchunk, libcomps, libsolv, librepo, rpm, libpopt, createrepo-c, dnf-hello, dnf5]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Materialize termux-packages + overlay de packages/
         run: |

@@ -59,7 +59,7 @@ jobs:
       contents: write            # peaceiris (publicar gh-pages)
       actions: read              # gh run list/download (solo update-stack; m11)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # --- herramientas: superset del generador (bootstrap.yml) + createrepo-c ---
       - name: Instalar herramientas

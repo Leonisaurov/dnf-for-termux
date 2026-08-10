@@ -37,7 +37,7 @@ jobs:
     steps:
       # 1. Checkout del repo (necesario para scripts/pkg2rpm.sh)
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # 2. Resolver el run de build.yml a usar:
       #    - si el input 'run' viene dado, se usa ese;
