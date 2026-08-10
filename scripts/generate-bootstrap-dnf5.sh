@@ -8,7 +8,7 @@
 # Flujo (14 pasos):
 #   1.  Preparar dirs bajo $WORK y limpiar restos.
 #   2.  Descargar main.json (índice termux-pacman) y resolver el set:
-#       base (30) + deps runtime curadas (26) + cierre transitivo
+#       base (30) + deps runtime curadas (27) + cierre transitivo
 #       (BFS sobre DEPENDS, fallback vía índice PROVIDES). Manifest.
 #   3.  Descargar los .pkg.tar.xz por FILENAME, validando SHA256SUM.
 #   4.  fix_any_arch_pkg() (arch=any → re-empaquetar con arch=aarch64) +
@@ -78,6 +78,9 @@ BASE_PKGS=(
 # Deps runtime curadas del stack dnf5 (extraídas de packages/*/build.sh).
 CURATED_DEPS=(
   libsqlite json-c fmt glib libxml2 zstd liblzma openssl zlib libsmartcols
+  # libmount: bin/lsns de util-linux enlaza contra libmount.so (DT_NEEDED)
+  # aunque util-linux NO la declara en DEPENDS (paquete aparte; MISS real C6).
+  libmount
   libandroid-glob file libandroid-spawn libarchive libbz2 libgcrypt libiconv
   lua54 readline libc++ ca-certificates gettext libcurl gpgme libexpat gnupg
 )
