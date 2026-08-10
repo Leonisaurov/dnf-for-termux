@@ -54,6 +54,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: bootstrap-aarch64
+          path: bootstrap-aarch64/
       - name: Compute release tag
         id: tag
         env:
