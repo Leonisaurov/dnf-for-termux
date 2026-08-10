@@ -165,7 +165,7 @@ jobs:
           fi
 
       - name: Upload .pkg.tar.xz artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.pkg }}-aarch64
           path: /tmp/artifacts/

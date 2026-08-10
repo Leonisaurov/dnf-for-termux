@@ -38,7 +38,7 @@ jobs:
         env:
           SUDO: sudo
         run: ./scripts/generate-bootstrap-dnf5.sh --arch aarch64 --out bootstrap-out/ --sign-key "$HOME/rpmdb"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bootstrap-aarch64
           path: bootstrap-out/
