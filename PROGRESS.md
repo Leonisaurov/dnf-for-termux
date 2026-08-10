@@ -1079,7 +1079,7 @@ dnf5 -y install dnf-hello && dnf-hello
     como gestor nativo: descarga el set de termux-pacman (base 30 + deps curadas + cierre
     transitivo), convierte `.pkg` → `.rpm` (`scripts/pkg2rpm.sh`), firma siempre (M9), puebla la
     rpmdb sqlite con `rpm --root`, verifica conffiles, audita DT_NEEDED (readelf), genera
-    `SYMLINKS.txt`, empaqueta `bootstrap-aarch64.zip` y verifica (unzip -l, rpm -qa en [50,200],
+    `SYMLINKS.txt`, empaqueta `bootstrap-aarch64.zip` y verifica (unzip -l, rpm -qa en [90,200],
     tamaño < 300MB, sha256). 14 pasos, correcciones C1–C6/M1–M9/m1–m5 aplicadas.
   - `.github/workflows/bootstrap.yml` (nuevo) — CI: job `build` en `ubuntu-24.04-arm` (genera y
     sube artifact `bootstrap-aarch64`) + job `publish` (descarga con download-artifact@v4 y
@@ -1141,5 +1141,44 @@ verificado contra el CI (`bootstrap.yml`), las Releases del repo y los docs actu
   actualizable vía dnf5 todavía).
 - **Validación on-device del bootstrap** publicado (flujo failsafe, CA-8 de
   `BOOTSTRAP-DESIGN.md`).
+
+---
+
+## Repo RPM COMPLETO — `repo-full.yml` + `--mode repo` (2026-08-09)
+
+**Estado: IMPLEMENTADO (script `--mode repo` + workflow nuevo + `deploy.yml` deshabilitado);
+pendiente: primer run de CI (dry-run → producción) + verificación on-device + borrado de
+`deploy.yml`.** Correcciones C1/M1–M6/m1–m12 del crítico aplicadas (tabla en
+`REPO-FULL-DESIGN.md` "## Estado de implementación").
+
+- **`scripts/generate-bootstrap-dnf5.sh`**: flag `--mode <bootstrap|repo>` (default
+  bootstrap) + `--no-project`. En modo repo ejecuta los pasos 1-4 (resolver cierre desde
+  `main.json`, descargar `.pkg`, `fix_any_arch`, convertir+firmar) y **sale temprano**:
+  copia `$WORK/rpms/*.rpm` + `manifest.txt` + `pkg-table.txt` a `--out`; sin rpmdb,
+  conffiles, DT_NEEDED, SYMLINKS.txt, zip ni PASO 13. `--no-project` omite la descarga del
+  stack de gh-pages (el workflow lo añade aparte). Flujo bootstrap (14 pasos) intacto.
+- **`.github/workflows/repo-full.yml`** (nuevo): **único writer** de `gh-pages/rpm/`.
+  Stack (9 .rpm, incl. `dnf-hello`) desde gh-pages (canónico) o artifacts de `build.yml`
+  (`update-stack=true`, con check de expiración m7); cierre termux-pacman vía
+  `--mode repo --no-project`; assert `total -ge stack + pkg-table` (M5/m9); firma única
+  `rpm --addsign` + `rpm -K` == total; `createrepo_c`; firma `repomd.xml` + `gpg --verify`
+  en CI (m12); export `termux-rpm.gpg`; staging `{index.html, .nojekyll, rpm/}`; clean
+  publish peaceiris `enable_jekyll: false` (M4). Input `dry-run` (build + verify sin
+  publicar; evidencia en `GITHUB_STEP_SUMMARY` — no artifact: `actions: read` no permite
+  upload-artifact). Permissions `{contents: write, actions: read}` (m11). Concurrency
+  `rpm-repo-publish`; triggers dispatch + schedule `30 0 * * 0`.
+- **`.github/workflows/deploy.yml`**: **DESHABILITADO** (`on: []` + comentario C1) —
+  sustituido por repo-full como único writer; borrar tras validar el primer run.
+- **Verificaciones locales**: `bash -n` del generador OK; YAML parseable (pyyaml) y
+  actionlint sin errores.
+
+### Pendientes
+
+- [ ] Primer run de `repo-full` (dry-run → producción) y verificación CA-1..CA-5 (§9 del
+  diseño).
+- [ ] Verificación on-device: CA-6 (instalados ⊆ repo, excluyendo `gpg-pubkey-*`; warning
+  con delta — M2) y CA-7 (`dnf5 install <convertido instalado>` → already installed o
+  actualizable — M3).
+- [ ] Borrar `deploy.yml` tras validar.
 
 

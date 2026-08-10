@@ -15,21 +15,36 @@
 #       conversión a .rpm con scripts/pkg2rpm.sh + firma (siempre, M9).
 #   5.  Descargar los 8 .rpm del proyecto desde gh-pages (grep anclado, M8).
 #   6.  Poblar la rpmdb sqlite con rpm --root (cada comando con $SUDO).
-#   7.  Verificar conffiles de dnf5 (termux.repo → gh-pages; dnf.conf).
+#   7.  Verificar conffiles de dnf5 (termux.repo → gh-pages; dnf.conf) y
+#       sobrescribir bin/pkg con el wrapper dnf5 (config/pkg.dnf5).
 #   8.  Limpieza de la rpmdb (wal/shm) + PRAGMA integrity_check (M2).
 #   9.  Auditoría estática DT_NEEDED con readelf (C6; no se ejecutan los ELF).
 #   10. SYMLINKS.txt (formato target←path) y borrado de symlinks.
 #   11. Auditoría no apt/pacman/dpkg/makepkg en bin/ (m1).
-#   12. Empaquetado zip (entries relativos a $PREFIX; excluye var/cache y tmp).
-#   13. Verificaciones: unzip -l; rpm -qa en [90,200] + gpg-pubkey>=1; tamaño < 300MB; sha256.
+#   12. Empaquetado zip (entries relativos a $PREFIX; excluye el contenido de
+#       var/cache y tmp, pero tmp/ y var/tmp/ quedan como dirs vacíos).
+#   13. Verificaciones: unzip -l; rpm -qa en [90,200] + gpg-pubkey>=1;
+#       coherencia rpmdb (instalados = manifest + stack + gpg-pubkey);
+#       tamaño < 300MB; sha256.
 #   14. Resumen final.
+#
+# Modo REPO (--mode repo): ejecuta solo los pasos 1-4 (preparar dirs, resolver
+#   el cierre desde main.json, descargar .pkg, convertir+firmar) y sale ANTES
+#   del paso 5. No toca rpmdb, ni conffiles, ni DT_NEEDED, ni SYMLINKS.txt, ni
+#   zip, ni el paso 13. Copia los .rpm firmados + manifest.txt + pkg-table.txt
+#   a OUT_DIR (para que el workflow repo-full.yml los consuma). Con
+#   --no-project no descarga el stack de gh-pages (el workflow lo añade aparte).
 #
 # Uso:
 #   scripts/generate-bootstrap-dnf5.sh [opciones]
 #
 # Opciones:
+#   --mode MODE    bootstrap (default) | repo (ver arriba)
+#   --no-project   en modo repo, NO descargar el stack de gh-pages (lo aporta
+#                  el workflow repo-full.yml desde artifacts o gh-pages)
 #   --arch ARCH     arquitectura del target (default: aarch64)
-#   --out DIR       dir de salida del zip (default: bootstrap-out/)
+#   --out DIR       dir de salida: zip (bootstrap, default: bootstrap-out/) o
+#                   .rpm+manifest+pkg-table (repo)
 #   --work DIR      dir de trabajo (default: ${TMPDIR:-$HOME/tmp}/bootstrap-work)
 #   --sign-key PATH ruta a la clave pública termux-rpm.gpg para importar en la
 #                   rpmdb local ($HOME/rpmdb) y poder verificar rpm -K. Si se
@@ -56,6 +71,11 @@ ARCH="aarch64"
 OUT_DIR="bootstrap-out"
 WORK=""
 SIGN_KEY=""
+# Modo de ejecución: bootstrap (flujo completo de 14 pasos) | repo (pasos 1-4
+# + salida temprana con .rpm firmados + manifest + pkg-table para repo-full.yml).
+MODE="bootstrap"
+# En modo repo, saltar download_project_rpms (el stack lo añade el workflow).
+NO_PROJECT=""
 
 REPO_URL="${REPO_URL:-https://sync.termux-pacman.dev/main/aarch64/}"
 PROJECT_RPM_URL="${PROJECT_RPM_URL:-https://leonisaurov.github.io/dnf-for-termux/rpm/}"
@@ -64,6 +84,12 @@ SUDO="${SUDO:-}"
 # Clave pública del repo dnf-for-termux (fingerprint fijo, m5).
 GPG_KEY_FINGERPRINT="E4AC7735BD60196E19123DB6247EEE5F6AA25EC9"
 GPG_KEY_NAME="dnf-for-termux"
+
+# Wrapper pkg → dnf5 (config/pkg.dnf5): termux-tools instala $PREFIX/bin/pkg que
+# despacha a pacman (inexistente en el bootstrap) vía termux-setup-package-manager
+# (valida solo apt|pacman). Se sobrescribe en el PASO 7. Ruta RELATIVA al
+# checkout del repo; se resuelve contra $SCRIPT_DIR en main() (runner = checkout).
+PKG_WRAPPER_SRC="config/pkg.dnf5"
 
 # Set base = bootstrap de termux-pacman menos pacman/termux-keyring (M4):
 # 30 paquetes. termux-keyring EXCLUIDO a propósito: el keyring de dnf5 es la
@@ -111,8 +137,15 @@ Uso: generate-bootstrap-dnf5.sh [opciones]
 Genera un bootstrap de Termux con dnf5 como gestor nativo (zip + rpmdb pre-poblada).
 
 Opciones:
+  --mode MODE     bootstrap (default) | repo
+                  repo: pasos 1-4 (resolver cierre, descargar, convertir+firmar)
+                  y salida temprana con .rpm + manifest.txt + pkg-table.txt en
+                  --out (sin rpmdb/zip; lo usa el workflow repo-full.yml)
+  --no-project    en modo repo, NO descargar el stack de gh-pages (lo aporta
+                  el workflow repo-full.yml aparte)
   --arch ARCH     arquitectura del target (default: aarch64)
-  --out DIR       dir de salida del zip (default: bootstrap-out/)
+  --out DIR       dir de salida: zip del bootstrap (default: bootstrap-out/) o
+                  .rpm + manifest.txt + pkg-table.txt (modo repo)
   --work DIR      dir de trabajo (default: ${TMPDIR:-$HOME/tmp}/bootstrap-work)
   --sign-key PATH ruta a la clave pública termux-rpm.gpg (importa en $HOME/rpmdb);
                   si se omite, se espera que ya esté importada en $HOME/rpmdb
@@ -126,6 +159,8 @@ Entorno:
 Ejemplos:
   # CI (runner con sudo; clave importada vía el secret RPM_SIGNING_KEY)
   SUDO=sudo ./scripts/generate-bootstrap-dnf5.sh --out bootstrap-out/
+  # Modo repo para repo-full.yml (stack aparte, sin descargar gh-pages)
+  ./scripts/generate-bootstrap-dnf5.sh --mode repo --no-project --out repo-out/
   # Local (Termux) con la clave pública exportada del repo
   ./scripts/generate-bootstrap-dnf5.sh --sign-key ~/termux-rpm.gpg
 EOF
@@ -148,10 +183,14 @@ parse_args() {
       --out)         OUT_DIR="${2:?--out necesita un valor}"; shift 2 ;;
       --work)        WORK="${2:?--work necesita un valor}"; shift 2 ;;
       --sign-key)    SIGN_KEY="${2:?--sign-key necesita un valor}"; shift 2 ;;
+      --mode)        MODE="${2:?--mode necesita un valor}"; shift 2 ;;
+      --no-project)  NO_PROJECT=1; shift ;;
       --help | -h)   usage; exit 0 ;;
       *) die "opción desconocida: $1 (usa --help)" ;;
     esac
   done
+  [ "$MODE" = bootstrap ] || [ "$MODE" = repo ] \
+    || die "modo inválido: '$MODE' (usa --mode bootstrap|repo)"
   [ "$ARCH" = "aarch64" ] || die "solo se soporta --arch aarch64 (se pidió '$ARCH')"
   [ -n "$WORK" ] || WORK="${TMPDIR:-$HOME/tmp}/bootstrap-work"
   mkdir -p "$OUT_DIR"
@@ -245,9 +284,12 @@ prepare_dirs() {
     "$OUT_DIR"
   ROOTFS="$WORK/rootfs"
   USR="$ROOTFS/data/data/com.termux/files/usr"
-  # dirs vacíos que dnf5 espera (la app ignora usr/tmp y usr/etc/termux/*.env*)
+  # dirs vacíos que dnf5 espera (la app ignora usr/tmp y usr/etc/termux/*.env*);
+  # tmp/ y var/tmp/ deben quedar como entries de directorio en el bootstrap: la
+  # app Termux y los scripts usan $PREFIX/tmp (validación de la app + $TMPDIR),
+  # y var/tmp/ se añade por coherencia.
   mkdir -p "$USR"/var/lib/dnf "$USR"/var/cache/dnf "$USR"/var/lib/rpm \
-           "$USR"/etc/dnf/vars "$USR"/tmp
+           "$USR"/etc/dnf/vars "$USR"/tmp "$USR"/var/tmp
   log "  ROOTFS=$ROOTFS"
   log "  USR=$USR"
 }
@@ -515,6 +557,7 @@ configure_dnf5() {
   log "PASO 7/14 — verificando conffiles de dnf5"
   local repo="$USR/etc/yum.repos.d/termux.repo"
   local conf="$USR/etc/dnf/dnf.conf"
+  local pkg_src="$SCRIPT_DIR/$PKG_WRAPPER_SRC"
 
   # termux.repo lo instala el .rpm de dnf5: SOLO se verifica que exista y apunte
   # a gh-pages con gpgcheck=1 repo_gpgcheck=1 y la gpgkey de termux-rpm.gpg.
@@ -524,9 +567,9 @@ configure_dnf5() {
   else
     warn "  $repo NO existe (el .rpm de dnf5 debería haberlo instalado) — generando termux.repo correcto"
     mkdir -p "$USR/etc/yum.repos.d"
-    # Fallback con contenido CORRECTO: config/yum.repos.d/termux.repo apunta a
-    # packages.termux.dev/rpm/ (404) con repo_gpgcheck=0, NO vale. Baseurl de
-    # gh-pages + gpgcheck=1 + repo_gpgcheck=1 + gpgkey de termux-rpm.gpg.
+    # Red de seguridad SOLO: el .rpm de dnf5 YA instala un termux.repo correcto
+    # (gh-pages, gpgcheck=1 repo_gpgcheck=1, gpgkey termux-rpm.gpg); este fallback
+    # escribe el mismo contenido por si el conffile no llegara al rootfs.
     printf '# termux.repo - repositorio dnf-for-termux (gh-pages)\n[termux]\nname=Termux RPM Repository\nbaseurl=https://Leonisaurov.github.io/dnf-for-termux/rpm/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://Leonisaurov.github.io/dnf-for-termux/rpm/termux-rpm.gpg\n' > "$repo"
     # re-ejecutar las mismas verificaciones tras escribirlo
     verify_termux_repo "$repo"
@@ -541,6 +584,22 @@ configure_dnf5() {
     sed "s#@PREFIX@#/data/data/com.termux/files/usr#g" \
       "$SCRIPT_DIR/config/dnf/dnf.conf" > "$conf"
   fi
+
+  # bin/pkg → wrapper dnf5 (m1): el bin/pkg de termux-tools despacha a pacman
+  # (inexistente aquí) vía termux-setup-package-manager (que valida solo
+  # apt|pacman y hace exit 1 con cualquier otro valor). Se sobrescribe con el
+  # wrapper self-contained config/pkg.dnf5 ANTES del empaquetado (PASO 12).
+  # NOTA (comportamiento conocido): sobrescribir bin/pkg deja la rpmdb con el
+  # hash del pkg ORIGINAL de termux-tools → `rpm -V`/`verify` reportará bin/pkg
+  # como modificado; además, un reinstall de termux-tools (`pkg install -r`)
+  # devolvería el pkg-pacman roto.
+  [ -f "$pkg_src" ] || die "no existe el wrapper de pkg: $pkg_src"
+  rm -f "$USR/bin/pkg"
+  cp "$pkg_src" "$USR/bin/pkg"
+  chmod 0755 "$USR/bin/pkg"
+  grep -q '^#!/usr/bin/env bash' "$USR/bin/pkg" \
+    || die "bin/pkg instalado no es el wrapper esperado (config/pkg.dnf5)"
+  log "  bin/pkg sobrescrito: wrapper dnf5 ($pkg_src)"
 }
 
 # --- PASO 8: limpieza de la rpmdb (M2) -----------------------------------------
@@ -634,7 +693,8 @@ package_zip() {
   log "PASO 12/14 — empaquetando zip (entries relativos a \$PREFIX)"
   local zipfile="$OUT_DIR/bootstrap-$ARCH.zip"
   rm -f "$zipfile"
-  ( cd "$USR" && zip -9r "$zipfile" . -x 'var/cache/*' 'tmp/*' )
+  ( cd "$USR" && zip -9r "$zipfile" . -x 'var/cache/*' 'tmp/*' 'var/tmp/*' \
+      && zip -q "$zipfile" tmp/ var/tmp/ )
   # entries sin prefijo data/ ni ./; SYMLINKS.txt presente
   if unzip -l "$zipfile" | grep -qE '(^| )data/'; then
     die "el zip contiene entries con prefijo data/ — revisar el empaquetado"
@@ -666,6 +726,40 @@ verify_outputs() {
   npub="$($SUDO rpm -qa --root "$ROOTFS" --dbpath "$DBREL" 2>/dev/null | grep -c '^gpg-pubkey-' || true)"
   [ "$npub" -ge 1 ] || die "rpmdb del rootfs sin gpg-pubkey (se importó termux-rpm.gpg?)"
   log "  rpm -qa (rootfs): $count paquetes — rango [90,200] OK (m3); gpg-pubkey: $npub"
+  # Coherencia rpmdb (CA): TODO lo que el bootstrap instala debe estar en la
+  # rpmdb. instalados = manifest (termux-pacman) + stack (gh-pages) + las
+  # gpg-pubkey importadas. Assert ≥ manifest+stack: tolera claves gpg extra no
+  # deterministas; el desglose exacto y los huérfanos salen después como avisos.
+  local count_manifest count_stack expected
+  local installed_n manifest_n known_n orphans missing
+  count_manifest="$(wc -l < "$WORK/manifest.txt")"
+  count_stack="${#PROJECT_STACK[@]}"
+  expected=$((count_manifest + count_stack))
+  if [ "$count" -lt "$expected" ]; then
+    die "coherencia rpmdb rota: $count instalados < $expected esperados ($count_manifest manifest + $count_stack stack + $npub gpg-pubkey)"
+  fi
+  log "  coherencia rpmdb: $count = $count_manifest manifest + $count_stack stack + $npub gpg-pubkey (+$((count - expected - npub)) extra)"
+  # Desglose por nombre: huérfanos instalados (fuera de manifest+stack+gpg) y
+  # paquetes del manifest que NO están instalados. Solo avisos: el assert ≥ ya
+  # cubre lo crítico; esto deja evidencia en el log para el resumen.
+  installed_n="$WORK/installed-names.txt"
+  manifest_n="$WORK/manifest-names.txt"
+  known_n="$WORK/known-names.txt"
+  $SUDO rpm -qa --root "$ROOTFS" --dbpath "$DBREL" --qf '%{NAME}\n' 2>/dev/null | sort -u > "$installed_n"
+  cut -d'|' -f1 "$WORK/manifest.txt" | sort -u > "$manifest_n"
+  cat "$manifest_n" > "$known_n"
+  printf '%s\n' "${PROJECT_STACK[@]}" >> "$known_n"
+  sort -u -o "$known_n" "$known_n"
+  orphans="$(comm -23 "$installed_n" "$known_n" | grep -v '^gpg-pubkey-' || true)"
+  missing="$(comm -23 "$manifest_n" "$installed_n" || true)"
+  if [ -n "$orphans" ]; then
+    warn "  $(( $(printf '%s\n' "$orphans" | wc -l) )) paquetes instalados fuera de manifest+stack+gpg (huérfanos): $(printf '%s ' $orphans)"
+  else
+    log "  sin huérfanos: todo lo instalado está en manifest+stack+gpg-pubkey"
+  fi
+  if [ -n "$missing" ]; then
+    warn "  $(( $(printf '%s\n' "$missing" | wc -l) )) paquetes del manifest NO instalados: $(printf '%s ' $missing)"
+  fi
   # tamaño < 300MB (m2; warning)
   size="$(stat -c %s "$zipfile")"
   if [ "$size" -gt $((300*1024*1024)) ]; then
@@ -684,12 +778,14 @@ verify_outputs() {
 # --- PASO 14: resumen --------------------------------------------------------------
 summary() {
   log "PASO 14/14 — resumen"
-  local zipfile="$OUT_DIR/bootstrap-$ARCH.zip" npkgs size
+  local zipfile="$OUT_DIR/bootstrap-$ARCH.zip" npkgs size gpg_count
   npkgs="$(wc -l < "$WORK/manifest.txt")"
   size="$(stat -c %s "$zipfile")"
+  gpg_count="$($SUDO rpm -qa --root "$ROOTFS" --dbpath "$DBREL" 2>/dev/null | grep -c '^gpg-pubkey-' || true)"
   log "  paquetes termux-pacman (manifest): $npkgs"
-  log "  rpm del proyecto (gh-pages):        ${#PROJECT_STACK[@]}"
-  log "  total rpm -qa (rootfs):             $($SUDO rpm -qa --root "$ROOTFS" --dbpath "$DBREL" 2>/dev/null | wc -l)"
+  log "  stack del proyecto (gh-pages):     ${#PROJECT_STACK[@]}"
+  log "  total rpm -qa (rootfs):            $($SUDO rpm -qa --root "$ROOTFS" --dbpath "$DBREL" 2>/dev/null | wc -l)"
+  log "  claves gpg (gpg-pubkey):           $gpg_count"
   log "  tamaño del zip:                     $((size/1024/1024)) MB"
   log "  sha256:                             $(cat "$WORK/bootstrap-$ARCH.sha256")"
   log "  salidas:"
@@ -709,6 +805,28 @@ main() {
   resolve_package_set
   download_pkgs
   convert_pkgs
+  if [ "$MODE" = repo ]; then
+    # Modo repo (repo-full.yml): salida temprana tras el paso 4. Sin rpmdb,
+    # conffiles, DT_NEEDED, SYMLINKS.txt, zip ni verificaciones del paso 13.
+    # Limpiar OUT_DIR entre runs: evita que .rpm obsoletos (o manifest/pkg-table
+    # de un run anterior con distinto conjunto) se cuelen en el repo ensamblado.
+    rm -f "$OUT_DIR"/*.rpm "$OUT_DIR"/manifest.txt "$OUT_DIR"/pkg-table.txt
+    #   - stack del proyecto: opcional. Con --no-project NO se descarga (el
+    #     workflow repo-full.yml lo añade aparte — 9 .rpm incl. dnf-hello —
+    #     desde gh-pages o artifacts de build.yml). Sin --no-project se bajan
+    #     los 8 de PROJECT_STACK (patrón probado del paso 5).
+    #   - dnf-hello: no está en main.json ni en PROJECT_STACK, así que el cierre
+    #     nunca lo incluye; el workflow lo añade explícitamente al stack.
+    [ -n "$NO_PROJECT" ] || download_project_rpms
+    cp "$WORK"/rpms/*.rpm "$OUT_DIR"/
+    [ -n "$NO_PROJECT" ] || cp "$WORK"/rpms-project/*.rpm "$OUT_DIR"/
+    # manifest.txt (auditoría, 1 línea por paquete) y pkg-table.txt (lo
+    # DESCARGABLE, nombre|filename|sha): el assert del workflow usa pkg-table.
+    cp "$WORK/manifest.txt" "$OUT_DIR/manifest.txt"
+    cp "$WORK/pkg-table.txt" "$OUT_DIR/pkg-table.txt"
+    log "modo repo: $(ls "$OUT_DIR"/*.rpm | wc -l) .rpm + manifest.txt + pkg-table.txt en $OUT_DIR"
+    exit 0
+  fi
   download_project_rpms
   populate_rpmdb
   configure_dnf5

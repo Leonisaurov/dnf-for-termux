@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# ============================================================================
+# pkg — wrapper de pkg para el bootstrap dnf5 de Termux
+#
+# termux-tools (convertido a RPM desde termux-pacman) instala $PREFIX/bin/pkg,
+# que despacha a 'pacman' vía termux-setup-package-manager (que valida SOLO
+# apt|pacman y hace exit 1 con cualquier otro valor). En el bootstrap dnf5,
+# pacman NO existe: el gestor oficial es dnf5. Este script reemplaza al pkg del
+# paquete y mapea cada subcomando (con los prefijos glob del original) a dnf5.
+#
+# El generador (scripts/generate-bootstrap-dnf5.sh, PASO 7) copia este archivo
+# a $USR/bin/pkg (chmod 0755) ANTES del empaquetado del bootstrap.
+#
+# Shebang #!/usr/bin/env bash: en el dispositivo, termux-exec (LD_PRELOAD shim
+# del bootstrap) reescribe la ruta del intérprete a $PREFIX/bin/bash, así que no
+# se depende de la ruta absoluta de bash del host.
+#
+# Mapeo verificado con dnf5 5.4.2.1 (dnf5 --help y dnf5 <sub> --help; además
+# repoquery --installed --list == rpm -ql en un paquete instalado):
+#   files          → dnf5 repoquery --installed --list   (usa la rpmdb local; el
+#                    default de repoquery es --available, por eso se fuerza
+#                    --installed; devuelve lo mismo que rpm -ql pero queda en el
+#                    dominio dnf5)
+#   show/info      → dnf5 info
+#   install        → dnf5 install      (sin flags extra: dnf5 ya es no-op sobre
+#                    paquetes instalados — equivalente nativo al --needed de
+#                    pacman; NO se añade --skip-unavailable, que cambiaría el
+#                    comportamiento ocultando errores de tipeo)
+#   autoclean      → dnf5 clean packages   (≈ apt autoclean: solo .rpm descargados)
+#   clean          → dnf5 clean all
+#   list-all       → dnf5 list --available
+#   list-installed → dnf5 list --installed
+#   reinstall      → dnf5 reinstall
+#   search         → dnf5 search
+#   uninstall      → dnf5 remove
+#   update         → dnf5 makecache    (solo sincroniza metadatos; en dnf5
+#                    'update' es un alias de 'upgrade', así que makecache es el
+#                    equivalente a 'apt update')
+#   upgrade        → dnf5 upgrade      (en dnf5 upgrade YA es full-upgrade)
+#   help           → ayuda breve
+#   *              → "Unknown command" + ayuda, exit 1
+# ============================================================================
+set -u
+
+# Root Check (igual que pkg de termux-tools): dnf5 como root usaría la rpmdb
+# del sistema (--root), no la de $PREFIX; se rechaza como el original.
+if [ "$(id -u)" = "0" ]; then
+	echo "Error: Cannot run 'pkg' command as root"
+	exit 1
+fi
+
+show_help() {
+	cat <<'EOF'
+Usage: pkg [--check-mirror] command [arguments]
+
+A tool for managing dnf5 packages (bootstrap dnf5 de Termux).
+  --check-mirror se acepta por compatibilidad con termux-tools y se ignora
+                 (dnf5 no selecciona mirrors: los repos se configuran estáticos
+                 en $PREFIX/etc/yum.repos.d/).
+
+Commands:
+  autoclean            - Remove all outdated packages from dnf5 cache
+                         (dnf5 clean packages).
+  clean                - Remove all packages from dnf5 cache (dnf5 clean all).
+  files <packages>     - Show all files installed by packages
+                         (dnf5 repoquery --installed --list).
+  install <packages>   - Install specified packages (dnf5 install).
+  list-all             - List all packages available in repositories
+                         (dnf5 list --available).
+  list-installed       - List installed packages (dnf5 list --installed).
+  reinstall <packages> - Reinstall specified installed packages at the latest
+                         version (dnf5 reinstall).
+  search <query>       - Search package by query, for example by name or
+                         description part (dnf5 search).
+  show <packages>      - Show basic metadata, such as dependencies (dnf5 info).
+  uninstall <packages> - Uninstall specified packages (dnf5 remove).
+  update               - Update dnf5 metadata cache from configured repositories
+                         (dnf5 makecache).
+  upgrade              - Upgrade all installed packages to the latest version
+                         (dnf5 upgrade).
+EOF
+	exit 1
+}
+
+# --check-mirror: aceptado por compatibilidad, no aplica a dnf5 (ver help).
+if [ "${1-}" = "--check-mirror" ]; then
+	shift 1
+fi
+
+# Sin subcomando o prefijo h* (help) → ayuda.
+if [ "$#" -eq 0 ] || printf '%s\n' "$1" | grep -q '^h'; then
+	show_help
+fi
+
+CMD="$1"
+shift 1
+ERROR=false
+
+case "$CMD" in
+	f*)                exec dnf5 repoquery --installed --list "$@" ;;
+	sh*|inf*)          exec dnf5 info "$@" ;;
+	add|i*)            exec dnf5 install "$@" ;;
+	autoc*)            exec dnf5 clean packages ;;
+	cl*)               exec dnf5 clean all ;;
+	list-a*)           exec dnf5 list --available "$@" ;;
+	list-i*)           exec dnf5 list --installed "$@" ;;
+	rei*)              exec dnf5 reinstall "$@" ;;
+	se*)               exec dnf5 search "$@" ;;
+	un*|rem*|rm|del*)  exec dnf5 remove "$@" ;;
+	upd*)              exec dnf5 makecache ;;
+	up|upg*)           exec dnf5 upgrade "$@" ;;
+	*)                 ERROR=true ;;
+esac
+
+if [ "$ERROR" = true ]; then
+	echo "Unknown command: '$CMD' (run 'pkg help' for usage information)"
+	exit 1
+fi

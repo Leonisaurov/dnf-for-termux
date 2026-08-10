@@ -92,6 +92,19 @@ DNF/
   `$HOME/rpmdb`) y artifact `bootstrap-aarch64` (`upload-artifact@v4`); job `publish` con
   `download-artifact@v4` y `gh release create` con tag `bootstrap-YYYY.MM.DD-rN+dnf5.android-7`
   (incrementa `rN` hasta tag libre) y sha256 en las notas.
+- **Publicación del repo RPM — único writer**: `.github/workflows/repo-full.yml` (nuevo)
+  publica el repo **COMPLETO** en `gh-pages/rpm/` y sustituye a `deploy.yml` (que quedó
+  **DESHABILITADO** con `on: []`; borrar tras validar el primer run). Stack del proyecto
+  (9 .rpm, **incluye `dnf-hello`**) desde gh-pages (canónico) u opcionalmente desde
+  artifacts de build.yml (`update-stack=true`, con check de expiración m7); cierre
+  termux-pacman (~93 .rpm) re-convertido con `generate-bootstrap-dnf5.sh --mode repo
+  --no-project` (mismo cierre que el bootstrap). Firma única `rpm --addsign` (idempotente)
+  + assert `rpm -K` == total; `createrepo_c`; firma `repomd.xml` **verificada en CI** con
+  `gpg --verify` (m12); export de `termux-rpm.gpg`; staging `{index.html, .nojekyll, rpm/}`
+  + clean publish peaceiris `enable_jekyll: false` (sin `destination_dir`/`keep_files`).
+  Triggers: `workflow_dispatch` (inputs `dry-run` — sin publicar, evidencia en step summary —
+  y `update-stack`) + `schedule` semanal (`30 0 * * 0`); concurrency `rpm-repo-publish`;
+  permissions `{contents: write, actions: read}` (m11).
 - **Convenciones**: `#!/usr/bin/env bash`, `set -euo pipefail`, `$TMPDIR` nunca `/tmp` en
   Termux (fallback `/tmp` solo en runners), staging bajo `$TMPDIR`, `SUDO` por env para
   `rpm --root`, zip creado desde `$USR` (nunca con prefijo `data/`), verificación estática en

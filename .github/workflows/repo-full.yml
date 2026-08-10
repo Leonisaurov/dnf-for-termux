@@ -1,0 +1,312 @@
+# ============================================================================
+# repo-full — publica el REPOSITORIO RPM COMPLETO en gh-pages/rpm/
+# ============================================================================
+# Único escritor de gh-pages/rpm/ (sustituye a deploy.yml, DESHABILITADO:
+# `on: workflow_dispatch` + job con `if: false`, para no bloquear el push).
+#   - Stack del proyecto (9 .rpm, INCLUYE dnf-hello): desde gh-pages (canónico,
+#     ya firmado, lo mismo que instala el bootstrap) por defecto; opcionalmente
+#     desde artifacts de build.yml (input update-stack=true).
+#   - Cierre termux-pacman (~93 .rpm convertidos): re-resuelto desde main.json
+#     por scripts/generate-bootstrap-dnf5.sh --mode repo --no-project (mismo
+#     cierre que el bootstrap; el stack lo añade ESTE workflow aparte).
+#   - Todos firmados con la MISMA clave (RPM_SIGNING_KEY / dnf-for-termux,
+#     fingerprint E4AC7735BD60196E19123DB6247EEE5F6AA25EC9) -> gpgcheck=1 +
+#     repo_gpgcheck=1 del termux.repo funcionan sin cambios de configuración.
+#     m6: si se rota la clave, actualizar el fingerprint en ESTE workflow Y en
+#     scripts/generate-bootstrap-dnf5.sh (GPG_KEY_FINGERPRINT).
+#   - Publicación atómica: staging {index.html, .nojekyll, rpm/} -> gh-pages
+#     limpio (sin destination_dir ni keep_files: la rama == staging exacto).
+#
+# DRY-RUN (input dry-run=true): construye y VERIFICA el staging sin publicar.
+#   Evidencia en GITHUB_STEP_SUMMARY + logs del job (NO artifact upload:
+#   actions/upload-artifact exige actions: write y aquí rige m11 = actions:
+#   read; documentado en REPO-FULL-DESIGN.md "Estado de implementación").
+#
+# RIESGO RESIDUAL (m8): si gh-pages quedara roto Y los artifacts de build.yml
+#   expiraran (>90 días), el modo update-stack no tendría fuente de recuperación.
+#   Mitigación: el modo default NO toca artifacts (stack desde gh-pages) y
+#   update-stack es deliberado (dispatch manual tras un build reciente).
+# ============================================================================
+
+name: repo-full
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'true = build + verify solo, sin publicar (evidencia en step summary)'
+        required: false
+        default: false
+        type: boolean
+      update-stack:
+        description: 'true = refrescar el stack desde artifacts de build.yml; false = stack desde gh-pages (canónico)'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "30 0 * * 0"   # domingo 00:30 UTC (30 min después del bootstrap semanal)
+
+# Serializa runs manuales contra el schedule: dos publicaciones no se pisan.
+concurrency:
+  group: rpm-repo-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04-arm    # macros rpm aarch64 (lección deploy.yml)
+    timeout-minutes: 120         # build+verify completo del repo (M7: cierre + repodata)
+    permissions:
+      contents: write            # peaceiris (publicar gh-pages)
+      actions: read              # gh run list/download (solo update-stack; m11)
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- herramientas: superset del generador (bootstrap.yml) + createrepo-c ---
+      - name: Instalar herramientas
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y rpm jq curl zip unzip sqlite3 binutils gpg \
+            libarchive-tools file gzip createrepo-c
+
+      # --- clave de firma + rpmdb local para rpm -K (patrón deploy.yml) ---
+      - name: Importar clave de firma (RPM_SIGNING_KEY)
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$RPM_SIGNING_KEY" ] || { echo "::error::RPM_SIGNING_KEY no está configurado — set the RPM_SIGNING_KEY secret"; exit 1; }
+          echo "$RPM_SIGNING_KEY" | gpg --batch --import
+          GPG_BIN="$(command -v gpg)"
+          # %__gpg_sign_cmd en ~/.rpmmacros (expansión DIFERIDA de %{__signature_filename}),
+          # gpg con ruta ABSOLUTA (rpm --addsign no hereda el PATH del shell),
+          # --batch --no-tty --no-verbose --no-armor: CI sin TTY y clave sin passphrase.
+          printf '%%_gpg_name dnf-for-termux\n%%__gpg_sign_cmd %s --batch --no-tty --no-verbose --no-armor --output %%{__signature_filename} --detach-sign --local-user %%{_gpg_name} %%{__plaintext_filename}\n' "$GPG_BIN" > "$HOME/.rpmmacros"
+          # Clave pública en la rpmdb LOCAL antes de rpm -K (rpm valida contra su
+          # propio keyring, no contra ~/.gnupg). Fingerprint fijo (m6): rotar aquí
+          # Y en el generador si la clave cambia.
+          mkdir -p "$HOME/rpmdb"
+          "$GPG_BIN" --export --armor E4AC7735BD60196E19123DB6247EEE5F6AA25EC9 > "$HOME/rpm-pubkey.asc"
+          rpm --define "_dbpath $HOME/rpmdb" --import "$HOME/rpm-pubkey.asc"
+
+      # --- stack desde gh-pages (default; 9 .rpm incl. dnf-hello) ---
+      # dnf-hello se MANTIENE en el repo completo (m1/m2): gh-pages lo tiene y
+      # la prueba documentada `dnf5 install dnf-hello` debe seguir funcionando.
+      - name: Resolver stack desde gh-pages (canónico)
+        if: inputs.update-stack != 'true'
+        run: |
+          set -euo pipefail
+          rm -rf stack && mkdir -p stack
+          REPO="https://leonisaurov.github.io/dnf-for-termux/rpm"
+          curl -fL "$REPO/repodata/repomd.xml" -o repomd.xml
+          primary_href="$(sed -n '/<data type="primary">/,/<\/data>/p' repomd.xml | grep -oP '<location href="\K[^"]+')"
+          [ -n "$primary_href" ] || { echo "::error::repomd.xml sin <data type=\"primary\">"; exit 1; }
+          curl -fL "$REPO/$primary_href" -o primary.xml.gz
+          gunzip -f primary.xml.gz
+          # Stack del proyecto: PROJECT_STACK (8) + dnf-hello = 9 (m3: dinámico,
+          # sin hardcodear 8). dnf-hello NO está en main.json ni en PROJECT_STACK,
+          # así que el cierre del generador nunca lo incluye — se añade aquí.
+          stack_pkgs=(dnf5 rpm libpopt libsolv librepo libcomps zchunk createrepo-c dnf-hello)
+          n=0
+          for name in "${stack_pkgs[@]}"; do
+            href=""
+            # grep ANCLADO (M8): basename "$name"-<dígito> (evita casar dnf-hello
+            # al buscar dnf5 y subpaquetes tipo libsolv-tools).
+            while IFS= read -r h; do
+              b="$(basename "$h")"
+              case "$b" in
+                "$name"-[0-9]*) href="$h"; break ;;
+              esac
+            done < <(grep -oP 'href="\K[^"]*'"$name"'-'"[0-9]"'[^"]*\.rpm' primary.xml)
+            [ -n "$href" ] || { echo "::error::no se encontró el .rpm de '$name' en primary.xml (gh-pages)"; exit 1; }
+            n=$((n+1))
+            curl -fL "$REPO/${href#/}" -o "stack/$(basename "$href")"
+          done
+          [ "$n" -eq "${#stack_pkgs[@]}" ] || { echo "::error::stack gh-pages incompleto: $n/${#stack_pkgs[@]}"; exit 1; }
+          echo "stack gh-pages: $n .rpm descargados"
+
+      # --- [solo update-stack] stack nuevo desde artifacts de build.yml ---
+      - name: Resolver run de build.yml (último exitoso)
+        if: inputs.update-stack == 'true'
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="$(gh run list --workflow=build.yml --status success --limit 1 --json databaseId -q '.[0].databaseId')"
+          [ -n "$RUN_ID" ] || { echo "::error::no hay run exitoso de build.yml"; exit 1; }
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      # m7: comprobar ANTES de gh run download que el run tiene artifacts NO
+      # expirados (gh run download falla con mensaje confuso si expiraron >90 días).
+      - name: Verificar artifacts del run de build.yml
+        if: inputs.update-stack == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ steps.run.outputs.id }}"
+          COUNT="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.expired == false)] | length')"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::el run $RUN_ID de build.yml no tiene artifacts vigentes (expiraron tras 90 días o no se generaron). Ejecuta build.yml o usa el modo default (stack desde gh-pages)."
+            exit 1
+          fi
+          echo "artifacts vigentes: $COUNT"
+
+      - name: Convertir el stack desde build.yml (update-stack)
+        if: inputs.update-stack == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ steps.run.outputs.id }}"
+          rm -rf pkgs-artifacts stack && mkdir -p pkgs-artifacts stack
+          gh run download "$RUN_ID" -D pkgs-artifacts
+          # Cada artifact de build.yml es un directorio con su .pkg.tar.*; se
+          # convierte a .rpm con pkg2rpm.sh. dnf-hello NO se filtra (m2).
+          for d in pkgs-artifacts/*/; do
+            pkg="$(find "$d" -name '*.pkg.tar.*' | head -1)"
+            [ -z "$pkg" ] && continue
+            bash scripts/pkg2rpm.sh "$pkg" stack
+          done
+          # ASSERT del tamaño del stack (SEMPRE 9 = 8 de PROJECT_STACK +
+          # dnf-hello). Sin este assert, si un job de la matrix de build.yml no
+          # subió artifact, stack_count se reduce y el check `total >= expected`
+          # del ensamblado (M5/m9) se auto-satisface -> se publicaría un repo
+          # con stack incompleto. El path gh-pages ya tiene su check estricto
+          # (`n == ${#stack_pkgs[@]}` con stack_pkgs = 9 elementos incl. dnf-hello);
+          # aquí no hay lista estática que comparar, solo el mínimo de 9.
+          stack_count="$(ls stack/*.rpm 2>/dev/null | wc -l)"
+          [ "$stack_count" -ge 9 ] || { echo "::error::stack incompleto: $stack_count/9"; exit 1; }
+          echo "stack update-stack: $stack_count .rpm convertidos del run $RUN_ID"
+
+      # --- núcleo: repo mode del generador (cierre termux-pacman, SIN stack) ---
+      # --no-project SIEMPRE: el stack lo añade este workflow (9 .rpm incl.
+      # dnf-hello desde gh-pages o artifacts). --sign-key apunta a la rpmdb
+      # local ya poblada en "Importar clave de firma" (el generador firma los
+      # convertidos: M9 "siempre").
+      - name: Resolver, convertir y firmar el cierre termux-pacman
+        run: |
+          set -euo pipefail
+          ./scripts/generate-bootstrap-dnf5.sh --mode repo --no-project \
+            --arch aarch64 --out repo-out --sign-key "$HOME/rpmdb"
+          echo "cierre convertido: $(ls repo-out/*.rpm | wc -l) .rpm"
+
+      # --- ensamblar el repo completo: stack + cierre ---
+      - name: Ensamblar repo completo
+        run: |
+          set -euo pipefail
+          rm -rf full && mkdir -p full
+          cp stack/*.rpm full/
+          cp repo-out/*.rpm full/
+          # M5/m9: assert total >= expected (NO ==), contra pkg-table.txt (lo
+          # descargable del generador) + stack dinámico (incl. dnf-hello).
+          stack_count="$(ls stack/*.rpm | wc -l)"
+          manifest_count="$(wc -l < repo-out/pkg-table.txt)"
+          total="$(ls full/*.rpm | wc -l)"
+          expected=$(( stack_count + manifest_count ))
+          if [ "$total" -lt "$expected" ]; then
+            echo "::error::repo incompleto: $total .rpm < esperado $expected (stack=$stack_count + cierre=$manifest_count)"
+            exit 1
+          fi
+          echo "repo ensamblado: $total .rpm (stack=$stack_count + cierre=$manifest_count)"
+          # CA-1 (m9): N = stack + manifest dinámico como fuente de verdad.
+          if [ "$expected" -lt 100 ]; then
+            echo "::warning::CA-1: N esperado $expected < 100 (stack+cierre) — revisar el cierre"
+          else
+            echo "CA-1: N esperado $expected >= 100 OK"
+          fi
+          echo "stack_count=$stack_count" >> "$GITHUB_ENV"
+          echo "manifest_count=$manifest_count" >> "$GITHUB_ENV"
+          echo "expected=$expected" >> "$GITHUB_ENV"
+          echo "total=$total" >> "$GITHUB_ENV"
+
+      # --- firma única sobre TODO el repo ---
+      # m5: rpm --addsign es idempotente sobre los .rpm ya firmados por el
+      # generador en modo repo (cabecera ~1 KB); el assert rpm -K final valida.
+      - name: Firmar todos los RPM
+        run: rpm --addsign full/*.rpm
+
+      - name: Verificar firmas de todos los RPM
+        run: |
+          set -euo pipefail
+          total="$(ls full/*.rpm | wc -l)"
+          ok="$(rpm -K --define "_dbpath $HOME/rpmdb" full/*.rpm | grep -c 'signatures OK' || true)"
+          echo "firmas OK: $ok / $total"
+          [ "$ok" -eq "$total" ] || { echo "::error::firmas incompletas: $ok/$total"; exit 1; }
+
+      # --- repodata TOTAL + firma repomd.xml ---
+      - name: Generar repodata
+        run: createrepo_c full/
+
+      - name: Firmar repomd.xml
+        run: gpg --batch --detach-sign --armor full/repodata/repomd.xml
+
+      # m12: CA-3 verificado EN CI (no solo on-device) — gpg --verify del
+      # repomd.xml.asc ANTES del publish.
+      - name: Verificar firma de repomd.xml
+        run: |
+          set -euo pipefail
+          gpg --verify full/repodata/repomd.xml.asc full/repodata/repomd.xml
+          echo "repomd.xml.asc OK (gpg --verify)"
+
+      - name: Exportar clave pública
+        run: gpg --export --armor E4AC7735BD60196E19123DB6247EEE5F6AA25EC9 > full/termux-rpm.gpg
+
+      # --- árbol de gh-pages: {index.html, .nojekyll, rpm/} ---
+      - name: Preparar árbol de gh-pages (staging)
+        run: |
+          set -euo pipefail
+          rm -rf staging && mkdir -p staging
+          # index.html del checkout (main) — m4: main ya tiene el fix del
+          # overflow; al primer run gh-pages == main (verificar identidad).
+          cp index.html staging/index.html
+          # M4: .nojekyll EXPLÍCITO en staging (el clean publish — sin
+          # keep_files — borraría el .nojekyll actual de gh-pages si no; peaceiris
+          # con enable_jekyll:false además lo garantiza).
+          : > staging/.nojekyll
+          cp -a full/. staging/rpm/
+
+      # --- dry-run: verificar y reportar SIN publicar (C1) ---
+      # Evidencia en GITHUB_STEP_SUMMARY + logs (no artifact: ver cabecera).
+      - name: Dry-run check (sin publicar)
+        if: inputs.dry-run == 'true'
+        run: |
+          set -euo pipefail
+          echo "== raíz staging (gh-pages) =="
+          ls -la staging/
+          echo "== rpm/ (primeras 20) =="
+          ls staging/rpm/ | head -20
+          echo "== rpm/ total =="
+          ls staging/rpm/*.rpm | wc -l
+          echo "== repodata =="
+          ls -la staging/rpm/repodata/
+          sigs="$(rpm -K --define "_dbpath $HOME/rpmdb" staging/rpm/*.rpm | grep -c 'signatures OK' || true)"
+          {
+            echo "## repo-full — DRY-RUN (sin publicar)"
+            echo ""
+            echo "Resultado: staging construido y verificado. Nada se publicó."
+            echo ""
+            echo "- total .rpm: **$(ls staging/rpm/*.rpm | wc -l)** (esperado >= $expected: stack=$stack_count + cierre=$manifest_count)"
+            echo "- firmas OK: **$sigs**"
+            echo "- repomd.xml.asc: presente y \`gpg --verify\` OK"
+            echo "- index.html: $([ -f staging/index.html ] && echo presente || echo FALTA)"
+            echo "- .nojekyll: $([ -f staging/.nojekyll ] && echo presente || echo FALTA)"
+            echo "- termux-rpm.gpg: $([ -f staging/rpm/termux-rpm.gpg ] && echo presente || echo FALTA)"
+            echo ""
+            echo "Evidencia: este summary + logs del job (no artifact: actions: read no permite upload-artifact, ver REPO-FULL-DESIGN.md)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # --- publicación (solo si NO es dry-run) ---
+      - name: Publicar en gh-pages
+        if: inputs.dry-run != 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: staging/
+          publish_branch: gh-pages
+          # M4: sin enable_jekyll, peaceiris igual añadiría .nojekyll; lo forzamos
+          # explícito (el staging ya lo incluye).
+          enable_jekyll: false
+          # sin destination_dir ni keep_files: gh-pages == árbol staging exacto
+          # (index.html conservado; rpm/ limpio sin .rpm obsoletos)

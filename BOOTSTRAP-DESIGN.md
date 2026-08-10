@@ -27,7 +27,7 @@
 - **M9**: **no existe `--no-sign`**: el generador **siempre firma**; el flag `--sign-key <path>` es solo para desarrollo local.
 - **m1**: auditoría de que `bin/` no contenga `apt|apt-get|apt-cache|dpkg|pacman|makepkg|repo-add` (falla si aparece).
 - **m2**: tamaño del zip `< 300MB` (warning si no).
-- **m3**: `rpm -qa` count en `[50,200]`.
+- **m3**: `rpm -qa` count en `[90,200]`.
 - **m4**: sha256 del zip en las release notes.
 - **m5**: `gpg --export --armor` con fingerprint fijo `E4AC7735BD60196E19123DB6247EEE5F6AA25EC9`.
 

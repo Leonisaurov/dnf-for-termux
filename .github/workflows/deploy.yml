@@ -1,24 +1,34 @@
 # ============================================================================
 # deploy — publica el repositorio RPM firmado (dnf-for-termux) en GitHub Pages
 # ============================================================================
-# Convierte los .pkg.tar.xz del último build exitoso de build.yml (o de un run
-# dado) a .rpm aarch64 (scripts/pkg2rpm.sh), los firma con la clave GPG
-# (secreto RPM_SIGNING_KEY), genera repodata/ (createrepo_c), firma repomd.xml
-# y publica todo en la rama gh-pages bajo rpm/.
+# DESHABILITADO: sustituido por repo-full.yml como único writer de gh-pages/rpm/.
+# Los jobs están con if: false para que nunca corran, ni siquiera con dispatch
+# manual (el trigger existe solo para que el YAML sea válido en GitHub).
+# Borrar tras validar el primer run de repo-full.
+# (Histórico: convertía los .pkg.tar.xz del último build exitoso de build.yml a
+#  .rpm aarch64 (scripts/pkg2rpm.sh), los firmaba con la clave GPG
+#  (secreto RPM_SIGNING_KEY), generaba repodata/ (createrepo_c), firmaba
+#  repomd.xml y publicaba en gh-pages/rpm/. Se conserva para recuperación.)
 # ============================================================================
 
 name: deploy
 
+# DESHABILITADO: sin triggers reales (ver cabecera). `workflow_dispatch` es un
+# evento VÁLIDO para GitHub Actions (con `on: []` el YAML es rechazado y el push
+# fallaría); el job lleva `if: false`, así que nunca ejecuta nada. El input `run`
+# se declara solo para que actionlint tipifique `github.event.inputs.run`.
 on:
   workflow_dispatch:
     inputs:
       run:
-        description: 'Run number de build.yml a publicar (vacío = último exitoso)'
+        description: 'Run ID de build.yml a usar (vacío = último exitoso)'
         required: false
         type: string
 
 jobs:
   deploy:
+    # if: false — deshabilitado para siempre (red de seguridad anti-dispatch).
+    if: false
     # Runner ARM64 nativo: el rpm es aarch64 y rpmbuild en x86_64 no tiene las
     # macros de platform de aarch64 ("No compatible architectures found").
     runs-on: ubuntu-24.04-arm
