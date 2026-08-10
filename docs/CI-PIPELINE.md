@@ -1,5 +1,11 @@
 # CI/CD Pipeline - dnf-for-termux
 
+> ⚠️ **Este documento puede estar desactualizado**: los workflows reales del proyecto son
+> `build.yml` (compila el stack en formato pacman), `deploy.yml` (publica el repo RPM
+> firmado a gh-pages) y `bootstrap.yml` (genera y publica el bootstrap como Release). No
+> existen `update-submodules.yml` ni submódulos. La **fuente de verdad** del estado actual
+> es [`PROGRESS.md`](../PROGRESS.md) y [`REPORT.md`](../REPORT.md).
+
 ## Arquitectura
 
 ```

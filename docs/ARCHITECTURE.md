@@ -1,5 +1,11 @@
 # dnf-for-termux: Architecture
 
+> ⚠️ **Este documento puede estar desactualizado**: describe el estado inicial del proyecto
+> (fases del plan original y estructura con submódulos que ya no existen). La **fuente de
+> verdad** del estado actual es [`PROGRESS.md`](../PROGRESS.md) y
+> [`REPORT.md`](../REPORT.md). Se mantiene por su valor de referencia del stack y del mapeo
+> de rutas FHS → Termux.
+
 ## Overview
 Adaptación de DNF5 (Fedora package manager) para funcionar en Termux (Android).
 

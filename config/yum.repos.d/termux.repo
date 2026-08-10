@@ -1,8 +1,10 @@
-# termux.repo - Repositorio base Termux para DNF
+# termux.repo - Repositorio RPM de dnf-for-termux en GitHub Pages
 [termux]
-name=Termux RPM Repository
-baseurl=https://packages.termux.dev/rpm/
+name=Termux RPM Repository (dnf-for-termux)
+baseurl=https://Leonisaurov.github.io/dnf-for-termux/rpm/
 enabled=1
 gpgcheck=1
-repo_gpgcheck=0
-gpgkey=https://packages.termux.dev/rpm/termux-rpm.gpg
+repo_gpgcheck=1
+gpgkey=https://Leonisaurov.github.io/dnf-for-termux/rpm/termux-rpm.gpg
+# Repo firmado GPG (clave dnf-for-termux). El auto-import de la gpgkey
+# lo maneja dnf5 mediante el patch 0015 (librepo: "Bad GPG signature").

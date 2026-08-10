@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dnf-for-termux — DNF5 for Termux</title>
+<meta name="description" content="dnf-for-termux: DNF5 package manager (RPM) ported to Termux / Android. Install DNF alongside apt or as your primary package manager with a signed RPM repository.">
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-alt: #161b22;
+    --bg-code: #010409;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #f0883e;
+    --accent-dim: #db6d28;
+    --accent-soft: rgba(240, 136, 62, 0.12);
+    --ok: #3fb950;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent-dim); text-decoration: underline; }
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                 "Liberation Mono", monospace;
+  }
+
+  .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  header {
+    padding: 64px 0 40px;
+    border-bottom: 1px solid var(--border);
+    background:
+      radial-gradient(ellipse 600px 240px at 30% -20%, var(--accent-soft), transparent),
+      var(--bg);
+  }
+  header .badge {
+    display: inline-block;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-dim);
+    border-radius: 999px;
+    padding: 3px 12px;
+    margin-bottom: 18px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: clamp(1.9rem, 5vw, 2.7rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  header h1 .prompt { color: var(--accent); }
+  header p.subtitle {
+    margin: 10px 0 0;
+    font-size: 1.1rem;
+    color: var(--text-dim);
+  }
+  header .meta {
+    margin-top: 18px;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+  }
+  header .meta .pkg { color: var(--text); }
+
+  /* Sections */
+  section { padding: 40px 0; border-bottom: 1px solid var(--border); }
+  section:last-of-type { border-bottom: none; }
+  section h2 {
+    margin: 0 0 18px;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  section h2::before { content: "❯ "; color: var(--accent); }
+  section p { color: var(--text-dim); margin: 0 0 14px; }
+  section p strong, section li strong { color: var(--text); }
+
+  /* Cards / install modes */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .card h3 { margin: 0 0 10px; font-size: 1.05rem; }
+  .card .tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .tag.alt { color: var(--ok); background: rgba(63, 185, 80, 0.12); border: 1px solid var(--ok); }
+  .tag.boot { color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-dim); }
+  .card p { margin-bottom: 12px; }
+
+  /* Code blocks */
+  pre {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    margin: 0 0 12px;
+  }
+  pre code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9rem;
+    color: var(--text);
+    white-space: pre;
+  }
+  code.inline {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--accent);
+  }
+  .cmdline::before { content: "$ "; color: var(--accent-dim); user-select: none; }
+
+  /* Lists */
+  ul.docs, ul.workflows { margin: 0; padding-left: 0; list-style: none; }
+  ul.docs li, ul.workflows li {
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  ul.docs li a, ul.workflows li a { font-weight: 500; }
+  ul.docs li span, ul.workflows li span {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  ul.workflows li .wf {
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 1px 8px;
+    margin-right: 8px;
+  }
+  ul.workflows li a { color: var(--text); }
+  ul.workflows li a:hover { color: var(--accent); }
+
+  .note {
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    border-left: 3px solid var(--accent-dim);
+    padding-left: 12px;
+    margin-top: 4px;
+  }
+
+  /* Footer */
+  footer {
+    padding: 28px 0 48px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+  }
+  footer .sep { margin: 0 8px; color: var(--border); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <span class="badge mono">rpm · dnf5 · termux · android</span>
+    <h1><span class="prompt mono">$</span> dnf-for-termux</h1>
+    <p class="subtitle">DNF5 package manager for Termux / Android</p>
+    <p class="meta mono">
+      <span class="pkg">dnf5</span> ported to Termux — RPM packages served from a
+      <a href="https://leonisaurov.github.io/dnf-for-termux/rpm/" target="_blank" rel="noopener">signed repository</a>
+    </p>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- Installation -->
+  <section id="instalacion">
+    <h2>Instalación</h2>
+    <p>Choose the mode that fits your setup. Both install DNF5 from the signed RPM repository hosted on GitHub Pages.</p>
+    <div class="grid">
+
+      <div class="card">
+        <h3>Alternate package manager <span class="tag alt">coexists with apt/pacman</span></h3>
+        <p>Keeps your existing Termux package manager untouched. DNF runs side by side with <code class="inline">apt</code> / <code class="inline">pacman</code>.</p>
+        <pre><code class="cmdline">bash scripts/install-dnf-termux.sh</code></pre>
+        <p>Follow the step-by-step guide:
+          <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/docs/INSTALLATION.md">docs/INSTALLATION.md</a>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>Primary package manager <span class="tag boot">bootstrap</span></h3>
+        <p>Full bootstrap image with DNF5 as the main manager. Download the release asset, unzip it and install in failsafe mode.</p>
+        <p>
+          <a href="https://github.com/Leonisaurov/dnf-for-termux/releases/tag/bootstrap-2026.08.10-r1%2Bdnf5.android-7" target="_blank" rel="noopener">
+            Latest bootstrap release (bootstrap-2026.08.10-r1+dnf5.android-7)
+          </a>
+        </p>
+        <p class="note">Download <code class="inline">bootstrap-aarch64.zip</code> (~73&nbsp;MB) and install it in Termux failsafe mode.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- RPM repository -->
+  <section id="repositorio">
+    <h2>Repositorio RPM</h2>
+    <p>Signed RPM repository for <code class="inline">aarch64</code>, published on GitHub Pages and consumed by DNF with <code class="inline">gpgcheck=1</code>.</p>
+    <p>
+      <a href="https://leonisaurov.github.io/dnf-for-termux/rpm/" target="_blank" rel="noopener">https://leonisaurov.github.io/dnf-for-termux/rpm/</a>
+    </p>
+    <p class="note">Repository metadata and packages are GPG-signed; DNF verifies signatures (<code class="inline">gpgcheck=1</code>) on every transaction.</p>
+  </section>
+
+  <!-- Documentation -->
+  <section id="documentacion">
+    <h2>Documentación</h2>
+    <ul class="docs">
+      <li>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux" target="_blank" rel="noopener">README</a>
+        <span>Project overview, goals and quick start.</span>
+      </li>
+      <li>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">docs/INSTALLATION.md</a>
+        <span>Full installation guide for both modes.</span>
+      </li>
+      <li>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/BOOTSTRAP-DESIGN.md" target="_blank" rel="noopener">BOOTSTRAP-DESIGN.md</a>
+        <span>Design and internals of the bootstrap image.</span>
+      </li>
+      <li>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/REPORT.md" target="_blank" rel="noopener">REPORT.md</a>
+        <span>Build and packaging report.</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Project / How it's built -->
+  <section id="proyecto">
+    <h2>Cómo se construye</h2>
+    <p>The project is built and shipped entirely with GitHub Actions workflows:</p>
+    <ul class="workflows">
+      <li>
+        <span class="wf">build.yml</span>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/.github/workflows/build.yml" target="_blank" rel="noopener">Build</a>
+        <span>Compiles the DNF5 stack for Termux.</span>
+      </li>
+      <li>
+        <span class="wf">deploy.yml</span>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/.github/workflows/deploy.yml" target="_blank" rel="noopener">Deploy</a>
+        <span>Signs and publishes the RPM repository to <code class="inline">/rpm/</code> on gh-pages.</span>
+      </li>
+      <li>
+        <span class="wf">bootstrap.yml</span>
+        <a href="https://github.com/Leonisaurov/dnf-for-termux/blob/main/.github/workflows/bootstrap.yml" target="_blank" rel="noopener">Bootstrap</a>
+        <span>Generates the bootstrap image and publishes it as a GitHub release.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <a href="https://github.com/Leonisaurov/dnf-for-termux" target="_blank" rel="noopener">github.com/Leonisaurov/dnf-for-termux</a>
+    <span class="sep">·</span>
+    <span>DNF5 for Termux / Android</span>
+  </div>
+</footer>
+
+</body>
+</html>

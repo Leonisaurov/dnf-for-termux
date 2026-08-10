@@ -77,7 +77,8 @@ DNF/
   de termux-pacman (base 30 + deps curadas + cierre transitivo BFS sobre DEPENDS → **93 pkgs,
   0 sin resolver**), `fix_any_arch_pkg()` re-empaqueta los `arch=any` a `aarch64`, conversión
   `.pkg` → `.rpm` con `scripts/pkg2rpm.sh` + firma (siempre, M9), rpmdb poblada con
-  `rpm --root` (`--dbpath` relativo, `$SUDO`), verificación de conffiles (`termux.repo` →
+  `rpm --root` (`--dbpath` absoluto `/data/data/com.termux/files/usr/var/lib/rpm`, `$SUDO`;
+  rpm ≥ 4.18 rechaza el relativo), verificación de conffiles (`termux.repo` →
   gh-pages con `gpgcheck=1 repo_gpgcheck=1`), auditoría DT_NEEDED con `readelf` (whitelist
   `BIONIC_LIBS`), `SYMLINKS.txt` (formato `target←path`), zip con entries relativos a `usr/`
   y verificaciones finales (`unzip -l`, `rpm -qa` en [90,200] + `gpg-pubkey` ≥1, tamaño

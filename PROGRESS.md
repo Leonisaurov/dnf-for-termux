@@ -1097,3 +1097,49 @@ dnf5 -y install dnf-hello && dnf-hello
 - **Referencia**: spec completa en `BOOTSTRAP-DESIGN.md` (incluye el bloque "Estado de
   implementación" con todas las correcciones del code-review).
 
+## Fase 1.6 — Bootstrap publicado y documentación de instalación (2026-08-10)
+
+Sesión posterior a la Fase 1.5 (2026-08-10). El **bootstrap del sistema con dnf5 como único
+gestor quedó PUBLICADO** y la documentación de instalación se añadió/actualizó. Estado
+verificado contra el CI (`bootstrap.yml`), las Releases del repo y los docs actualizados.
+
+### ✅ Workflow `bootstrap.yml` SUCCESS y primer release publicado
+
+- El workflow `bootstrap.yml` (job `build` en `ubuntu-24.04-arm` + job `publish`) corrió
+  **SUCCESS** tras una cadena de **11 fixes del CI** que dejaron el pipeline verde.
+- **Primer release publicado**: tag
+  `bootstrap-2026.08.10-r1+dnf5.android-7`
+  (https://github.com/Leonisaurov/dnf-for-termux/releases/tag/bootstrap-2026.08.10-r1%2Bdnf5.android-7),
+  asset **`bootstrap-aarch64.zip`** (~73 MB, 95+ paquetes RPM: stack dnf5 + base de
+  termux-pacman convertida).
+- **sha256 del asset**: `55ed99682afa91b3d1c9bfd68e6fd11e269fa4b84cbf2b97dfb3f29809776081`
+  (incluido en las release notes, como exige m4).
+- El generador (`scripts/generate-bootstrap-dnf5.sh`) usa el **`--dbpath` ABSOLUTO**
+  `/data/data/com.termux/files/usr/var/lib/rpm` (decisión D8/R1 corregida: rpm ≥ 4.18
+  rechaza el relativo) y el publish descarga el artifact con `download-artifact@v4` a
+  `bootstrap-aarch64/` (zip en `bootstrap-aarch64/bootstrap-aarch64.zip`).
+
+### ✅ Documentación de instalación añadida/actualizada
+
+- **`docs/INSTALLATION.md`** (nuevo) — guía principal de instalación: modo **alterno**
+  (`scripts/install-dnf-termux.sh`/`uninstall-dnf-termux.sh`) y modo **principal
+  (bootstrap)** con el flujo failsafe de la wiki.
+- **`README.md`** (nuevo en la raíz) — resumen del proyecto con sección **## Instalación**
+  (los 2 modos) y enlaces a docs, repo RPM, Releases y workflows.
+- **`config/yum.repos.d/termux.repo`** — sincronizado con el conffile real que instala el
+  paquete dnf5 (`https://Leonisaurov.github.io/dnf-for-termux/rpm/` con
+  `gpgcheck=1 repo_gpgcheck=1`; sustituye al placeholder `packages.termux.dev/rpm/` 404).
+- **`BOOTSTRAP-DESIGN.md` / `style.md`** — corregidas las menciones al `--dbpath` relativo
+  (→ absoluto) y al layout de publish antiguo (`bootstrap-out/` → `bootstrap-aarch64/`).
+- **`docs/ARCHITECTURE.md` / `docs/CI-PIPELINE.md`** — nota de estado desactualizado al
+  inicio (la fuente de verdad es `PROGRESS.md`/`REPORT.md`).
+
+### Pendientes
+
+- **Ecosistema completo**: más paquetes RPM en el repo (conversión del ecosistema Termux a
+  RPM en CI) — el repo hoy solo tiene los 8 del stack (el base del bootstrap no es
+  actualizable vía dnf5 todavía).
+- **Validación on-device del bootstrap** publicado (flujo failsafe, CA-8 de
+  `BOOTSTRAP-DESIGN.md`).
+
+

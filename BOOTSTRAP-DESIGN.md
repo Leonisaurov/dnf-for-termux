@@ -2,9 +2,11 @@
 
 ## Estado de implementación
 
-> **2026-08-09 — IMPLEMENTADO.** El generador (`scripts/generate-bootstrap-dnf5.sh`)
-> y el workflow (`.github/workflows/bootstrap.yml`) están creados y verificados
-> (`bash -n` OK; YAML parseable). Pendiente: lanzar el CI y la validación on-device.
+> **2026-08-10 — PUBLICADO.** El generador (`scripts/generate-bootstrap-dnf5.sh`)
+> y el workflow (`.github/workflows/bootstrap.yml`) están implementados, el CI
+> (`bootstrap.yml`) corrió **SUCCESS** y el **primer release quedó publicado**:
+> `bootstrap-2026.08.10-r1+dnf5.android-7` (asset `bootstrap-aarch64.zip` ~73 MB,
+> sha256 `55ed99682afa91b3d1c9bfd68e6fd11e269fa4b84cbf2b97dfb3f29809776081`).
 > Este bloque marca las correcciones del code-review ya aplicadas; el resto del
 > documento se mantiene como spec de referencia.
 
@@ -240,12 +242,14 @@ major que el rpm del dispositivo 4.18.1-4 → mismo esquema sqlite, sin migraci�
 ### 4.1 Comando clave
 
 ```bash
-# dbpath RELATIVO al root: en rpm 4.16+ "--dbpath" con "--root" se interpreta
-# relativo al root. Ruta relativa → robusta ante el cambio de comportamiento de
-# 4.16 (los paths absolutos dejaron de prefijarse con el root).
+# dbpath ABSOLUTO dentro del rootfs: rpm >= 4.18 RECHAZA --dbpath relativo
+# ("arguments to --dbpath must begin with '/'") y une el absoluto a --root, con lo
+# que en disco queda $ROOTFS/data/data/... (idéntico al layout relativo anterior).
+# El dispositivo lo verá en $PREFIX/var/lib/rpm. (decisión D8/R1 corregida)
 SUDO=${SUDO:-}   # en CI: "sudo" (passwordless en runners); local sin root: vacío
+DBREL="/data/data/com.termux/files/usr/var/lib/rpm"
 $SUDO rpm -ivh --root "$ROOTFS" \
-       --dbpath "data/data/com.termux/files/usr/var/lib/rpm" \
+       --dbpath "$DBREL" \
        --nodeps --ignorearch --noscripts --notriggers --nosignature --noverify \
        "$TMP/convert-rpms/"*.rpm "$TMP/project-rpms/"*.rpm
 ```
@@ -257,7 +261,8 @@ $SUDO rpm -ivh --root "$ROOTFS" \
 - El **dbpath resultante** es `$ROOTFS/data/data/com.termux/files/usr/var/lib/rpm/Packages`
   (sqlite) → viaja dentro del zip en `var/lib/rpm/`. Alternativa equivalente:
   `--define "_dbpath /data/data/com.termux/files/usr/var/lib/rpm"` (con `--root`, rpm lo
-  une al root). Se documentan ambas; se implementa la **relativa**.
+  une al root). Se documentan ambas; se implementa la **absoluta** (el relativo fue la
+  decisión original D8, pero **rpm ≥ 4.18 lo rechaza** — corregido en el generador).
 - **`--ignorearch` no es estrictamente necesario en runner arm64** (el host es aarch64),
   pero se mantiene por robustez (si algún día se corre en x86_64, no rompe).
 
@@ -275,7 +280,7 @@ contraseña → el paso de población usa `$SUDO`. Tras instalar, `$SUDO chown -
 ### 4.3 Importación de la clave pública en la rpmdb
 
 ```bash
-$SUDO rpm --root "$ROOTFS" --dbpath "data/data/com.termux/files/usr/var/lib/rpm" \
+$SUDO rpm --root "$ROOTFS" --dbpath "/data/data/com.termux/files/usr/var/lib/rpm" \
      --import "$TMP/termux-rpm.gpg"
 ```
 
@@ -287,10 +292,10 @@ de la rpmdb). El `repo_gpgcheck=1` (metadata) usa el keyring de librepo
 ### 4.4 Verificación de la rpmdb en CI
 
 ```bash
-count=$(rpm -qa --root "$ROOTFS" --dbpath "data/data/com.termux/files/usr/var/lib/rpm" | wc -l)
+count=$(rpm -qa --root "$ROOTFS" --dbpath "/data/data/com.termux/files/usr/var/lib/rpm" | wc -l)
 [ "$count" -ge 60 ]                      # ~70-80 esperados
-rpm -qa --root "$ROOTFS" --dbpath "..." | grep -c '^gpg-pubkey-'   # ≥ 1 (clave importada)
-rpm -qa --root "$ROOTFS" --dbpath "..." | grep -q '^dnf5-'         # el stack está
+rpm -qa --root "$ROOTFS" --dbpath "/data/data/com.termux/files/usr/var/lib/rpm" | grep -c '^gpg-pubkey-'   # ≥ 1 (clave importada)
+rpm -qa --root "$ROOTFS" --dbpath "/data/data/com.termux/files/usr/var/lib/rpm" | grep -q '^dnf5-'         # el stack está
 ```
 
 ---
@@ -372,11 +377,12 @@ PASO 4 — firma de los RPMs convertidos (salvo --no-sign)
   gpg --export --armor > "$TMP/termux-rpm.gpg"
 
 PASO 5 — población de la rpmdb (§4)
-  $SUDO rpm -ivh --root "$ROOTFS" --dbpath "data/data/com.termux/files/usr/var/lib/rpm" \
+  DBREL="/data/data/com.termux/files/usr/var/lib/rpm"   # ABSOLUTO (rpm ≥ 4.18 rechaza relativo)
+  $SUDO rpm -ivh --root "$ROOTFS" --dbpath "$DBREL" \
         --nodeps --ignorearch --noscripts --notriggers --nosignature --noverify \
         "$TMP/convert-rpms/"*.rpm "$TMP/project-rpms/"*.rpm
-  $SUDO rpm --root "$ROOTFS" --dbpath "..." --import "$TMP/termux-rpm.gpg"
-  verify: rpm -qa --root "$ROOTFS" --dbpath "..."  (count ≥ 60, gpg-pubkey ≥ 1, dnf5 presente)
+  $SUDO rpm --root "$ROOTFS" --dbpath "$DBREL" --import "$TMP/termux-rpm.gpg"
+  verify: rpm -qa --root "$ROOTFS" --dbpath "$DBREL"  (count ≥ 60, gpg-pubkey ≥ 1, dnf5 presente)
   $SUDO chown -R "$(id -u):$(id -g)" "$ROOTFS"
 
 PASO 6 — configuración de dnf5 (verificación + dirs vacíos)
@@ -440,20 +446,24 @@ jobs:
           unzip -l; test -f SYMLINKS.txt; conteo rpm -qa (lo hace el script, refuerzo aquí)
       - Upload artifact: actions/upload-artifact@v4
           name: bootstrap-aarch64
-          path: bootstrap-out/bootstrap-aarch64.zip
+          path: bootstrap-out/                 # zip en bootstrap-out/bootstrap-aarch64.zip
 
   publish:
     needs: [ build ]
     runs-on: ubuntu-latest
-    permissions: { contents: write }
+    permissions: { contents: write, actions: read }
     steps:
-      - Checkout (para git ls-remote de tags)
+      - Checkout (actions/checkout@v4)
+      - Download artifact: actions/download-artifact@v4
+          name: bootstrap-aarch64
+          path: bootstrap-aarch64/             # zip en bootstrap-aarch64/bootstrap-aarch64.zip
       - Calcular tag:
           # tag = bootstrap-YYYY.MM.DD-rN+dnf5.android-7
-          # rN: mayor N existente para la fecha de hoy (git ls-remote --tags origin
-          # 'bootstrap-2026.08.09-r*+dnf5.android-7'); si la fecha cambia → r1.
-      - gh release create "$TAG" bootstrap-out/bootstrap-aarch64.zip \
-            --title "Termux bootstrap (dnf5) $TAG" --notes "<manifest + instrucciones>"
+          # rN: mayor N existente para la fecha de hoy (gh api releases/tags); si la
+          # fecha cambia → r1.
+      - gh release create "$TAG" bootstrap-aarch64/bootstrap-aarch64.zip \
+            --title "Bootstrap archives for Termux application (dnf5.android-7)" \
+            --notes "<manifest + sha256 + instrucciones>"
           # necesita GH_TOKEN=${{ github.token }} (permissions contents: write)
 
 ```
@@ -484,7 +494,7 @@ Consideraciones del diseño:
 | D5 | Runner del generador | **`ubuntu-24.04-arm`** | x86_64 | `rpmbuild --target aarch64` necesita macros de platform aarch64 (lección deploy.yml b41589d) |
 | D6 | Resolución de versiones de termux-pacman | Parsear `main.db` (metadata oficial del repo) → `%FILENAME%` | Clonar el repo de paquetes; manifest fijo | Ligero, oficial, y da el cierre transitivo por `%DEPENDS%`; manifest de salida para reproducibilidad |
 | D7 | Layout del rootfs | `$ROOTFS/data/data/com.termux/files/usr` (zip desde `$USR`) | rootfs con árbol directo `bin/…` | Los payloads de los .rpm usan rutas absolutas `/data/…/usr/…` → `rpm --root` los coloca correctamente; el zip sale relativo a `$PREFIX` |
-| D8 | `--dbpath` | **Relativo** (`data/data/com.termux/files/usr/var/lib/rpm`) con `--root` | Absoluto; `%_dbpath` | rpm 4.16+ trata `--dbpath` relativo al root; el relativo es robusto ante el cambio de comportamiento de 4.16 |
+| D8 | `--dbpath` | **Absoluto** (`/data/data/com.termux/files/usr/var/lib/rpm`) con `--root` | Relativo; `%_dbpath` | Originalmente se eligió el relativo (D8 corregida: **rpm ≥ 4.18 rechaza `--dbpath` relativo** — "arguments to --dbpath must begin with '/'"); el absoluto se une a `--root`, dejando en disco `$ROOTFS/data/data/...` (mismo layout en el zip) |
 | D9 | Ejecución de verificación de dnf5 en CI | **NO** (solo estática: `file`, `rpm -qa`, `unzip -l`) | `chroot`/qemu en el runner | Los binarios son aarch64/Android (bionic): no corren en Ubuntu; la validación funcional es on-device (criterio CA-8) |
 | D10 | `dnf-hello` en el bootstrap | **Excluido** | Incluirlo | Es el paquete de prueba; el bootstrap mínimo no lo necesita (añadirlo es 1 línea) |
 
@@ -494,7 +504,7 @@ Consideraciones del diseño:
 
 | # | Riesgo | Impacto si falla | Mitigación / Plan B |
 |---|---|---|---|
-| R1 | **Esquema sqlite de la rpmdb 4.16 vs 4.18** (incompatibilidad de migración) | dnf5 no lee la rpmdb | Runner Ubuntu **24.04** (rpm 4.18.1, mismo major que el dispositivo 4.18.1-4); verificar `rpm --version` en CI; el `--dbpath` relativo evita el bug de 4.16 con paths absolutos |
+| R1 | **Esquema sqlite de la rpmdb 4.16 vs 4.18** (incompatibilidad de migración) | dnf5 no lee la rpmdb | Runner Ubuntu **24.04** (rpm 4.18.1, mismo major que el dispositivo 4.18.1-4); verificar `rpm --version` en CI; usar `--dbpath` **absoluto** (rpm ≥ 4.18 lo exige; el relativo de la decisión D8 original fallaba con "arguments to --dbpath must begin with '/'") |
 | R2 | **Rutas de los .rpm convertidos** (¿`/data/…/usr/` correctas?) | archivos fuera de lugar en el zip | `pkg2rpm.sh` ya emite rutas absolutas verificadas (deploy.yml); assert en el generador: `$USR/bin/dnf5` existe y `unzip -l` no muestra prefijo `data/` |
 | R3 | **`chown` a root como usuario no-root** en `rpm -i --root` | fallo del paso de población | `SUDO` en CI (passwordless); alternativa documentada: `fakeroot rpm` |
 | R4 | **Firma falla / clave ausente** | bootstrap sin firma → gpgcheck rompe o hay que degradar | Abortar con error claro si falta `RPM_SIGNING_KEY`; patrón `%__gpg_sign_cmd` + gpg absoluto ya probado (deploy.yml); `--no-sign` solo para desarrollo local |
