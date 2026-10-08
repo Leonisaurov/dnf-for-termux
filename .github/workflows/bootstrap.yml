@@ -52,7 +52,7 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: bootstrap-aarch64
           path: bootstrap-aarch64/
